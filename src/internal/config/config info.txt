@@ -1,0 +1,1 @@
+här inne ska nod konfiguration finnas, saker som ip, namn och roll
