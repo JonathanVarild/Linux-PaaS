@@ -1,0 +1,13 @@
+{
+	"name": "linux-paas",
+	"version": "0.0.0",
+	"lockfileVersion": 3,
+	"requires": true,
+	"description": "",
+	"main": "app.js",
+	"module": "true",
+	"packages": {},
+	"scripts": {
+		"start": "node app.js"
+	}
+}

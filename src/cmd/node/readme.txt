@@ -1,1 +1,0 @@
-här inne ska vi ha kod för att starta upp alla noder

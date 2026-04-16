@@ -1,1 +1,0 @@
-här ska logik för replikation finnas, hur vi replikerar postgres osv
