@@ -16,6 +16,10 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 		throw new Error("Create a new cluster before accepting join requests.");
 	}
 
+	if (clusterConfig.coordinatorNode.hostname !== os.hostname()) {
+		throw new Error("Only the coordinator node can accept join requests.");
+	}
+
 	const coordinatorIp = clusterConfig.coordinatorNode.public_ip;
 	const { cert, key } = makeCert(coordinatorIp);
 	const token = randomString(32);
