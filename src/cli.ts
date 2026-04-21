@@ -1,13 +1,14 @@
 import { Command } from "commander";
 import { sendIpcCommand } from "./utils/ipc";
+import { getPublicIP } from "./utils/ip";
 
 const program = new Command();
 
 program
 	.command("create")
-	.argument("<publicIp>")
-	.action(async (publicIp: string) => {
-		await sendIpcCommand("create", { publicIp });
+	.option("--node-ip <ip>", "The IP that other nodes can reach this node at.")
+	.action(async (options: { nodeIp?: string }) => {
+		await sendIpcCommand("create", { nodeIp: options.nodeIp ?? (await getPublicIP()) });
 	});
 
 program.command("accept").action(async () => {
