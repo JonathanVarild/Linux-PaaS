@@ -1,13 +1,26 @@
 {
 	"name": "linux-paas",
 	"version": "0.0.0",
-	"lockfileVersion": 3,
-	"requires": true,
 	"description": "",
-	"main": "app.js",
-	"module": "true",
-	"packages": {},
+	"private": true,
 	"scripts": {
-		"start": "node app.js"
+		"start": "tsx src/daemon.ts",
+		"create": "tsx src/cli.ts create",
+		"accept": "tsx src/cli.ts accept",
+		"join": "tsx src/cli.ts join"
+	},
+	"dependencies": {
+		"@types/node-ipc": "^9.2.3",
+		"commander": "^14.0.1",
+		"express": "^5.1.0",
+		"node-fetch": "^3.3.2",
+		"node-ipc": "^12.0.0",
+		"tsx": "^4.20.6",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@types/express": "^5.0.6",
+		"@types/node": "^25.6.0",
+		"typescript": "^6.0.2"
 	}
 }
