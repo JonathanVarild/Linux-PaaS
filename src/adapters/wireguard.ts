@@ -2,7 +2,9 @@ import { execFileSync } from "child_process";
 import { FailedToGenerateWireguardKeysError } from "../errors/adapterErrors";
 
 export function generateWireguardKeys(): string {
-	if (process.env.NODE_ENV !== "production") {
+	console.log("env:", process.env.NODE_ENV);
+	
+	if (process.env.NODE_ENV != "production" && process.env.NODE_ENV != "docker_dev" ) {
 		return "DEVELOPMENT_PUBLIC_KEY";
 	}
 

@@ -5,9 +5,13 @@
 	"private": true,
 	"scripts": {
 		"start": "tsx src/daemon.ts",
+		"dev": "tsx watch src/daemon.ts",
 		"create": "tsx src/cli.ts create",
 		"accept": "tsx src/cli.ts accept",
-		"join": "tsx src/cli.ts join"
+		"join": "tsx src/cli.ts join",
+		"shell1": "docker compose exec worker-1 /bin/bash",
+		"shell2": "docker compose exec worker-2 /bin/bash",
+		"shell3": "docker compose exec worker-3 /bin/bash"
 	},
 	"dependencies": {
 		"@types/node-ipc": "^9.2.3",

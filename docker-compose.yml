@@ -1,0 +1,43 @@
+x-linux-paas-base: &linux-paas-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: linux-paas:dev
+  init: true
+  working_dir: /app
+  volumes:
+    - .:/app
+    - node_modules:/app/node_modules
+  restart: unless-stopped
+
+services:
+  worker-1:
+    <<: *linux-paas-base
+    hostname: worker-1
+    networks:
+      cluster_net:
+        ipv4_address: 172.31.0.10
+
+  worker-2:
+    <<: *linux-paas-base
+    hostname: worker-2
+    networks:
+      cluster_net:
+        ipv4_address: 172.31.0.11
+
+  worker-3:
+    <<: *linux-paas-base
+    hostname: worker-3
+    networks:
+      cluster_net:
+        ipv4_address: 172.31.0.12
+
+volumes:
+  node_modules:
+
+networks:
+  cluster_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
