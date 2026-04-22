@@ -55,7 +55,9 @@ export async function joinServerHandler(args: unknown, stream: OutputStream): Pr
 		const joinedClusterConfig = Cluster.fromJSON(JSON.parse(responseBody));
 		setClusterConfig(joinedClusterConfig);
 
-		stream.sendOutput(responseBody);
+		const nodeId = joinedClusterConfig.nodes.findIndex(node => node.wireguard_public_key === wgPublicKey);
+
+		stream.sendOutput(`Successfully joined cluster as node #${joinedClusterConfig.nodes[nodeId].node_id}.\n`);
 		return responseBody;
 	} catch (error) {
 		throw new Error(`Failed to join cluster network: ${error instanceof Error ? error.message : "Unknown error"}`);
