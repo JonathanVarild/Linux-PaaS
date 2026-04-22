@@ -1,6 +1,7 @@
 import fs from "fs";
 import ipc from "node-ipc";
 import { acceptServerHandler } from "./cli/accept";
+import { configServerHandler } from "./cli/config";
 import { createServerHandler } from "./cli/create";
 import { joinServerHandler } from "./cli/join";
 
@@ -20,6 +21,7 @@ type IPCPayload = {
 // Create mapping of command names and their handlers.
 const commandHandlers: Record<string, CommandHandler> = {
 	accept: acceptServerHandler,
+	config: configServerHandler,
 	create: createServerHandler,
 	join: joinServerHandler,
 };

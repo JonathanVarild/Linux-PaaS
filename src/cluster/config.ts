@@ -47,7 +47,7 @@ export class ClusterNode {
 		return `${this.wireguardIp}:${CONFIG_WIREGUARD_LISTEN_PORT}`;
 	}
 
-	toJSON(): NodeInfo {
+	getCopy(): NodeInfo {
 		return { ...this.config };
 	}
 }
@@ -70,9 +70,9 @@ export class Cluster {
 			version: CONFIG_VERSION,
 			created_at: now,
 			updated_at: now,
-			coordinator_node: coordinatorNode.toJSON(),
-			leader_node: coordinatorNode.toJSON(),
-			nodes: [coordinatorNode.toJSON()],
+			coordinator_node: coordinatorNode.getCopy(),
+			leader_node: coordinatorNode.getCopy(),
+			nodes: [coordinatorNode.getCopy()],
 			services: {},
 		});
 	}
@@ -130,19 +130,20 @@ export class Cluster {
 
 		const newConfig: ClusterInfo = {
 			...this.config,
-			nodes: [...this.config.nodes, newNode.toJSON()],
+			nodes: [...this.config.nodes, newNode.getCopy()],
 			updated_at: new Date().toISOString(),
 		};
 
 		this.config = newConfig;
 	}
 
-	toJSON(): ClusterInfo {
+	getCopy(): ClusterInfo {
 		return {
 			...this.config,
 			coordinator_node: { ...this.config.coordinator_node },
 			leader_node: this.config.leader_node ? { ...this.config.leader_node } : undefined,
 			nodes: this.config.nodes.map((node) => ({ ...node })),
+			services: { ...this.config.services },
 		};
 	}
 }

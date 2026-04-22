@@ -57,7 +57,7 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 
 		try {
 			clusterConfig.joinNode(joinRequestResult.data.hostname, normalizedIp, joinRequestResult.data.wg_public_key);
-			return res.json(clusterConfig.toJSON());
+			return res.json(clusterConfig.getCopy());
 		} catch (error) {
 			console.error("Error processing join request:", error);
 			if (error instanceof ClusterConfigError) {

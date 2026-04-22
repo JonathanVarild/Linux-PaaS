@@ -7,8 +7,10 @@
 		"start": "tsx src/daemon.ts",
 		"dev": "tsx watch src/daemon.ts",
 		"create": "tsx src/cli.ts create",
+		"config": "tsx src/cli.ts config",
 		"accept": "tsx src/cli.ts accept",
 		"join": "tsx src/cli.ts join",
+		"redeploy": "docker compose down && docker compose up -d --build",
 		"shell1": "docker compose exec worker-1 /bin/bash",
 		"shell2": "docker compose exec worker-2 /bin/bash",
 		"shell3": "docker compose exec worker-3 /bin/bash"

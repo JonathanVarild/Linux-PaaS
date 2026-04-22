@@ -27,4 +27,11 @@ program
 		await sendIpcCommand("join", bundleJson);
 	});
 
+program
+	.command("config")
+	.description("Displays the current cluster configuration.")
+	.action(async () => {
+		await sendIpcCommand("config", {});
+	});
+
 void program.parseAsync();

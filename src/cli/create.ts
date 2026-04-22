@@ -20,6 +20,6 @@ export async function createServerHandler(options: unknown, stream: OutputStream
 
 	const config = Cluster.create(os.hostname(), publicIp);
 	setClusterConfig(config);
-	const result = config.toJSON();
+	const result = config.getCopy();
 	stream.sendOutput(JSON.stringify(result, null, 2));
 }
