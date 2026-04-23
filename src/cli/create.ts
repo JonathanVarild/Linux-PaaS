@@ -21,6 +21,9 @@ export async function createServerHandler(options: unknown, stream: OutputStream
 	const config = Cluster.create(os.hostname(), publicIp);
 	setClusterConfig(config);
 	saveClusterConfigToDisk(config);
-	const result = config.getCopy();
+	const result = {
+		cluster: config.getCopy(),
+		nodes: config.getNodesCopy(),
+	};
 	stream.sendOutput(JSON.stringify(result, null, 2));
 }

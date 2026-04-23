@@ -14,6 +14,11 @@ const JoinBundleSchema = z.object({
 	cert_pem: z.string(),
 });
 
+const JoinResponseSchema = z.object({
+	cluster: z.unknown(),
+	nodes: z.unknown(),
+});
+
 export async function joinServerHandler(args: unknown, stream: OutputStream): Promise<string> {
 	if (hasClusterConfig()) {
 		throw new Error("Cluster configuration already exists.");
@@ -52,13 +57,17 @@ export async function joinServerHandler(args: unknown, stream: OutputStream): Pr
 			throw new Error(`Failed to join cluster network (${result.status}): ${responseBody}`);
 		}
 
-		const joinedClusterConfig = Cluster.fromJSON(JSON.parse(responseBody));
+		const joinResponseValue = parseOrThrowWithMessage(JoinResponseSchema, JSON.parse(responseBody));
+		const joinedClusterConfig = Cluster.fromJSON(joinResponseValue.cluster, joinResponseValue.nodes);
 		setClusterConfig(joinedClusterConfig);
 		saveClusterConfigToDisk(joinedClusterConfig);
 
-		const nodeId = joinedClusterConfig.nodes.findIndex((node) => node.wireguard_public_key === wgPublicKey);
+		const joinedNode = joinedClusterConfig.nodes.find((node) => node.wireguardPublicKey === wgPublicKey);
+		if (!joinedNode) {
+			throw new Error("Could not find local node in new cluster configuration after joining.");
+		}
 
-		stream.sendOutput(`Successfully joined cluster as node #${joinedClusterConfig.nodes[nodeId].node_id}.\n`);
+		stream.sendOutput(`Successfully joined cluster as node #${joinedNode.id}.\n`);
 		return responseBody;
 	} catch (error) {
 		throw new Error(`Failed to join cluster network: ${error instanceof Error ? error.message : "Unknown error"}`);

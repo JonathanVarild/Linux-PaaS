@@ -4,6 +4,8 @@ x-linux-paas-base: &linux-paas-base
     dockerfile: Dockerfile
   image: linux-paas:dev
   init: true
+  cap_add:
+    - NET_ADMIN
   working_dir: /app
   volumes:
     - .:/app

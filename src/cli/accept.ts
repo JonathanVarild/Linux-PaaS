@@ -21,7 +21,7 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 		throw new Error("Only the coordinator node can accept join requests.");
 	}
 
-	const coordinatorIp = clusterConfig.coordinatorNode.public_ip;
+	const coordinatorIp = clusterConfig.coordinatorNode.publicIp;
 	const { cert, key } = makeCert(coordinatorIp);
 	const token = randomString(32);
 	const bundle = {
@@ -58,7 +58,10 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 
 		try {
 			clusterConfig.joinNode(joinRequestResult.data.hostname, normalizedIp, joinRequestResult.data.wg_public_key);
-			return res.json(clusterConfig.getCopy());
+			return res.json({
+				cluster: clusterConfig.getCopy(),
+				nodes: clusterConfig.getNodesCopy(),
+			});
 		} catch (error) {
 			console.error("Error processing join request:", error);
 			if (error instanceof ClusterConfigError) {

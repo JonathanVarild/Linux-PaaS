@@ -6,5 +6,15 @@ export async function configServerHandler(_args: unknown, stream: OutputStream):
 		throw new Error("Create a new cluster before viewing configuration.");
 	}
 
-	stream.sendOutput(JSON.stringify(getClusterConfig().getCopy(), null, 2));
+	const clusterConfig = getClusterConfig();
+	stream.sendOutput(
+		JSON.stringify(
+			{
+				cluster: clusterConfig.getCopy(),
+				nodes: clusterConfig.getNodesCopy(),
+			},
+			null,
+			2,
+		),
+	);
 }
