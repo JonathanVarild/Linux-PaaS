@@ -1,11 +1,10 @@
-import { getClusterConfig } from "../cluster/config";
-import { OutputStream } from "../daemon";
+import { getClusterConfig, hasClusterConfig } from "../cluster/config";
+import { OutputStream } from "../app/daemon";
 
 export async function configServerHandler(_args: unknown, stream: OutputStream): Promise<void> {
-	const clusterConfig = getClusterConfig();
-	if (clusterConfig === null) {
+	if (!hasClusterConfig()) {
 		throw new Error("Create a new cluster before viewing configuration.");
 	}
 
-	stream.sendOutput(JSON.stringify(clusterConfig.getCopy(), null, 2));
+	stream.sendOutput(JSON.stringify(getClusterConfig().getCopy(), null, 2));
 }

@@ -1,11 +1,11 @@
 import https from "https";
 import os from "os";
 import fetch from "node-fetch";
-import { Cluster, getClusterConfig, setClusterConfig } from "../cluster/config";
+import { Cluster, hasClusterConfig, setClusterConfig } from "../cluster/config";
 import { type NodeJoinRequest } from "../models/networking";
 import { z } from "zod";
 import { generateWireguardKeys } from "../adapters/wireguard";
-import { OutputStream } from "../daemon";
+import { OutputStream } from "../app/daemon";
 import { parseOrThrowWithMessage } from "../utils/zod";
 
 const JoinBundleSchema = z.object({
@@ -15,7 +15,7 @@ const JoinBundleSchema = z.object({
 });
 
 export async function joinServerHandler(args: unknown, stream: OutputStream): Promise<string> {
-	if (getClusterConfig() !== null) {
+	if (hasClusterConfig()) {
 		throw new Error("Cluster configuration already exists.");
 	}
 
@@ -55,7 +55,7 @@ export async function joinServerHandler(args: unknown, stream: OutputStream): Pr
 		const joinedClusterConfig = Cluster.fromJSON(JSON.parse(responseBody));
 		setClusterConfig(joinedClusterConfig);
 
-		const nodeId = joinedClusterConfig.nodes.findIndex(node => node.wireguard_public_key === wgPublicKey);
+		const nodeId = joinedClusterConfig.nodes.findIndex((node) => node.wireguard_public_key === wgPublicKey);
 
 		stream.sendOutput(`Successfully joined cluster as node #${joinedClusterConfig.nodes[nodeId].node_id}.\n`);
 		return responseBody;

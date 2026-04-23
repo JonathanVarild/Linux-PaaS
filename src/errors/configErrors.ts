@@ -25,3 +25,10 @@ export class MaximumNodesReachedError extends Error {
 		this.name = "MaximumNodesReachedError";
 	}
 }
+
+export class NoClusterConfigError extends Error {
+	constructor() {
+		super("No cluster configuration is currently loaded.");
+		this.name = "NoClusterConfigError";
+	}
+}

@@ -1,6 +1,6 @@
 import os from "os";
-import { Cluster, getClusterConfig, setClusterConfig } from "../cluster/config";
-import { OutputStream } from "../daemon";
+import { Cluster, hasClusterConfig, setClusterConfig } from "../cluster/config";
+import { OutputStream } from "../app/daemon";
 import { z } from "zod";
 import { Ipv4Schema } from "../models/networking";
 import { parseOrThrowWithMessage } from "../utils/zod";
@@ -14,7 +14,7 @@ export async function createServerHandler(options: unknown, stream: OutputStream
 	const parsedOptions = parseOrThrowWithMessage(CreateOptionsSchema, options);
 	const publicIp = parsedOptions.nodeIp ?? (await getPublicIP());
 
-	if (getClusterConfig() !== null) {
+	if (hasClusterConfig()) {
 		throw new Error("Cluster configuration already exists.");
 	}
 

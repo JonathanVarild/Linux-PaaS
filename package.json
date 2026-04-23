@@ -4,8 +4,8 @@
 	"description": "",
 	"private": true,
 	"scripts": {
-		"start": "tsx src/daemon.ts",
-		"dev": "tsx watch src/daemon.ts",
+		"start": "tsx src/app.ts",
+		"dev": "tsx watch src/app.ts",
 		"create": "tsx src/cli.ts create",
 		"config": "tsx src/cli.ts config",
 		"accept": "tsx src/cli.ts accept",

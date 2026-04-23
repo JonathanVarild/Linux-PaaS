@@ -11,6 +11,7 @@ export type NodeInfo = z.infer<typeof NodeInfoSchema>;
 
 export const ClusterInfoSchema = z.object({
 	cluster_id: z.string(),
+	access_key: z.string().trim().min(1),
 	version: z.number().int(),
 	created_at: z.string(),
 	updated_at: z.string(),

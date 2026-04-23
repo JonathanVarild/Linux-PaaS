@@ -1,12 +1,12 @@
 import fs from "fs";
 import ipc from "node-ipc";
-import { acceptServerHandler } from "./cli/accept";
-import { configServerHandler } from "./cli/config";
-import { createServerHandler } from "./cli/create";
-import { joinServerHandler } from "./cli/join";
+import { acceptServerHandler } from "../cli/accept";
+import { configServerHandler } from "../cli/config";
+import { createServerHandler } from "../cli/create";
+import { joinServerHandler } from "../cli/join";
 
 import type { Socket } from "net";
-import { DAEMON_ID, DAEMON_SOCKET_PATH } from "./utils/ipc";
+import { DAEMON_ID, DAEMON_SOCKET_PATH } from "../utils/ipc";
 
 export type OutputStream = {
 	sendOutput: (data: string) => void;
@@ -37,7 +37,7 @@ function removeSocketFile() {
 }
 
 // Function to start the IPC daemon.
-async function startDaemon(): Promise<void> {
+export async function startDaemon(): Promise<void> {
 	removeSocketFile();
 
 	// Set IPC ID and logging configuration.
@@ -108,5 +108,3 @@ process.on("SIGTERM", () => {
 	ipc.server.stop();
 	process.exit(0);
 });
-
-void startDaemon();

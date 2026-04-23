@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { ClusterInfo, ClusterInfoSchema, NodeInfo, NodeInfoSchema } from "../models/config";
-import { ClusterConfigError, MaximumNodesReachedError, NodeAlreadyExistsError } from "../errors/configErrors";
+import { ClusterConfigError, MaximumNodesReachedError, NoClusterConfigError, NodeAlreadyExistsError } from "../errors/configErrors";
 import { generateWireguardKeys } from "../adapters/wireguard";
 import { parseOrThrow } from "../utils/zod";
 
@@ -67,6 +67,7 @@ export class Cluster {
 
 		return new Cluster({
 			cluster_id: crypto.randomUUID(),
+			access_key: crypto.randomBytes(32).toString("base64url"),
 			version: CONFIG_VERSION,
 			created_at: now,
 			updated_at: now,
@@ -83,6 +84,10 @@ export class Cluster {
 
 	get clusterId(): string {
 		return this.config.cluster_id;
+	}
+
+	get accessKey(): string {
+		return this.config.access_key;
 	}
 
 	get createdAt(): string {
@@ -159,5 +164,9 @@ export function hasClusterConfig(): boolean {
 }
 
 export function getClusterConfig() {
+	if (clusterConfigSingleton === null) {
+		throw new NoClusterConfigError();
+	}
+
 	return clusterConfigSingleton;
 }

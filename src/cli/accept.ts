@@ -5,16 +5,17 @@ import os from "os";
 import fs from "fs";
 import path from "path";
 import { execFileSync } from "child_process";
-import { getClusterConfig } from "../cluster/config";
+import { getClusterConfig, hasClusterConfig } from "../cluster/config";
 import { NodeJoinRequestSchema } from "../models/networking";
 import { ClusterConfigError } from "../errors/configErrors";
-import { OutputStream } from "../daemon";
+import { OutputStream } from "../app/daemon";
 
 export async function acceptServerHandler(_args: unknown, stream: OutputStream): Promise<{ url: string; token: string }> {
-	const clusterConfig = getClusterConfig();
-	if (clusterConfig === null) {
+	if (!hasClusterConfig()) {
 		throw new Error("Create a new cluster before accepting join requests.");
 	}
+
+	const clusterConfig = getClusterConfig();
 
 	if (clusterConfig.coordinatorNode.hostname !== os.hostname()) {
 		throw new Error("Only the coordinator node can accept join requests.");
