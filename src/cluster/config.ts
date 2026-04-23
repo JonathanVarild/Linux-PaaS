@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import crypto from "crypto";
 import { ClusterInfo, ClusterInfoSchema, NodeInfo, NodeInfoSchema } from "../models/config";
 import { ClusterConfigError, MaximumNodesReachedError, NoClusterConfigError, NodeAlreadyExistsError } from "../errors/configErrors";
@@ -5,6 +7,7 @@ import { generateWireguardKeys } from "../adapters/wireguard";
 import { parseOrThrow } from "../utils/zod";
 
 export const CONFIG_VERSION = 1;
+export const CONFIG_PATH = "/etc/linux-paas/config.json";
 export const CONFIG_WIREGUARD_CIDR = 24;
 export const CONFIG_WIREGUARD_NETWORK_IP = [10, 0, 0, 0];
 export const CONFIG_WIREGUARD_LISTEN_PORT = 51820;
@@ -140,6 +143,7 @@ export class Cluster {
 		};
 
 		this.config = newConfig;
+		saveClusterConfigToDisk(this);
 	}
 
 	getCopy(): ClusterInfo {
@@ -155,6 +159,11 @@ export class Cluster {
 
 var clusterConfigSingleton: Cluster | null = null;
 
+export function saveClusterConfigToDisk(config: Cluster): void {
+	fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
+	fs.writeFileSync(CONFIG_PATH, JSON.stringify(config.getCopy(), null, 2));
+}
+
 export function setClusterConfig(config: Cluster): void {
 	clusterConfigSingleton = config;
 }
@@ -169,4 +178,10 @@ export function getClusterConfig() {
 	}
 
 	return clusterConfigSingleton;
+}
+
+// Load cluster config from disk if there is one.
+if (fs.existsSync(CONFIG_PATH)) {
+	const configJson = fs.readFileSync(CONFIG_PATH, "utf8");
+	clusterConfigSingleton = Cluster.fromJSON(JSON.parse(configJson));
 }

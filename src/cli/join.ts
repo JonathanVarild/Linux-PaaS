@@ -1,7 +1,7 @@
 import https from "https";
 import os from "os";
 import fetch from "node-fetch";
-import { Cluster, hasClusterConfig, setClusterConfig } from "../cluster/config";
+import { Cluster, hasClusterConfig, saveClusterConfigToDisk, setClusterConfig } from "../cluster/config";
 import { type NodeJoinRequest } from "../models/networking";
 import { z } from "zod";
 import { generateWireguardKeys } from "../adapters/wireguard";
@@ -54,6 +54,7 @@ export async function joinServerHandler(args: unknown, stream: OutputStream): Pr
 
 		const joinedClusterConfig = Cluster.fromJSON(JSON.parse(responseBody));
 		setClusterConfig(joinedClusterConfig);
+		saveClusterConfigToDisk(joinedClusterConfig);
 
 		const nodeId = joinedClusterConfig.nodes.findIndex((node) => node.wireguard_public_key === wgPublicKey);
 

@@ -1,4 +1,3 @@
-import { startDaemon } from "./app/daemon";
+import "./cluster/config";
+import "./app/daemon";
 import "./app/httpServer";
-
-startDaemon();

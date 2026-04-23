@@ -36,65 +36,6 @@ function removeSocketFile() {
 	}
 }
 
-// Function to start the IPC daemon.
-export async function startDaemon(): Promise<void> {
-	removeSocketFile();
-
-	// Set IPC ID and logging configuration.
-	ipc.config.id = DAEMON_ID;
-	ipc.config.silent = true;
-
-	// Define IPC server behavior.
-	ipc.serve(DAEMON_SOCKET_PATH, () => {
-		// Listen for command events from clients.
-		ipc.server.on("command", async (payload: IPCPayload, socket: Socket) => {
-			// Ensure that the command is valid, and send an error if not.
-			if (!commandHandlers[payload.command]) {
-				ipc.server.emit(socket, "error", { message: "Invalid command." });
-				return;
-			}
-
-			// Create stream to send output back to the client.
-			const stream: OutputStream = {
-				sendOutput(data: string) {
-					if (!socket.destroyed) {
-						ipc.server.emit(socket, "output", data);
-					}
-				},
-				waitForSocketClose() {
-					return new Promise<void>((resolve) => {
-						if (socket.destroyed) {
-							resolve();
-							return;
-						}
-
-						socket.once("close", () => {
-							resolve();
-						});
-					});
-				},
-			};
-
-			// Asynchronously invoke command handler and send completion event or error based on the result.
-			try {
-				const result = await commandHandlers[payload.command](payload.args, stream);
-				if (!socket.destroyed) {
-					ipc.server.emit(socket, "complete", result);
-				}
-			} catch (error) {
-				const message = error instanceof Error ? error.message : "Failed to execute command due to an unknown error.";
-				if (!socket.destroyed) {
-					ipc.server.emit(socket, "error", { message });
-				}
-			}
-		});
-	});
-
-	// Start listening for IPC messages.
-	ipc.server.start();
-	console.log(`Daemon listening for IPC messages on ${DAEMON_SOCKET_PATH}`);
-}
-
 // Trigger for when process receives interrupt signal.
 process.on("SIGINT", () => {
 	removeSocketFile();
@@ -108,3 +49,60 @@ process.on("SIGTERM", () => {
 	ipc.server.stop();
 	process.exit(0);
 });
+
+// Ensure any existing socket file is removed.
+removeSocketFile();
+
+// Set IPC ID and logging configuration.
+ipc.config.id = DAEMON_ID;
+ipc.config.silent = true;
+
+// Define IPC server behavior.
+ipc.serve(DAEMON_SOCKET_PATH, () => {
+	// Listen for command events from clients.
+	ipc.server.on("command", async (payload: IPCPayload, socket: Socket) => {
+		// Ensure that the command is valid, and send an error if not.
+		if (!commandHandlers[payload.command]) {
+			ipc.server.emit(socket, "error", { message: "Invalid command." });
+			return;
+		}
+
+		// Create stream to send output back to the client.
+		const stream: OutputStream = {
+			sendOutput(data: string) {
+				if (!socket.destroyed) {
+					ipc.server.emit(socket, "output", data);
+				}
+			},
+			waitForSocketClose() {
+				return new Promise<void>((resolve) => {
+					if (socket.destroyed) {
+						resolve();
+						return;
+					}
+
+					socket.once("close", () => {
+						resolve();
+					});
+				});
+			},
+		};
+
+		// Asynchronously invoke command handler and send completion event or error based on the result.
+		try {
+			const result = await commandHandlers[payload.command](payload.args, stream);
+			if (!socket.destroyed) {
+				ipc.server.emit(socket, "complete", result);
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Failed to execute command due to an unknown error.";
+			if (!socket.destroyed) {
+				ipc.server.emit(socket, "error", { message });
+			}
+		}
+	});
+});
+
+// Start listening for IPC messages.
+ipc.server.start();
+console.log(`Daemon listening for IPC messages on ${DAEMON_SOCKET_PATH}`);

@@ -1,5 +1,5 @@
 import os from "os";
-import { Cluster, hasClusterConfig, setClusterConfig } from "../cluster/config";
+import { Cluster, hasClusterConfig, saveClusterConfigToDisk, setClusterConfig } from "../cluster/config";
 import { OutputStream } from "../app/daemon";
 import { z } from "zod";
 import { Ipv4Schema } from "../models/networking";
@@ -20,6 +20,7 @@ export async function createServerHandler(options: unknown, stream: OutputStream
 
 	const config = Cluster.create(os.hostname(), publicIp);
 	setClusterConfig(config);
+	saveClusterConfigToDisk(config);
 	const result = config.getCopy();
 	stream.sendOutput(JSON.stringify(result, null, 2));
 }
