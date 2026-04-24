@@ -8,3 +8,21 @@ export const NodeJoinRequestSchema = z.object({
 	wg_public_key: z.string().trim().min(1),
 });
 export type NodeJoinRequest = z.infer<typeof NodeJoinRequestSchema>;
+
+export const ClusterConfigRequestSchema = z.object({
+	cluster: z.unknown(),
+	nodes: z.unknown(),
+});
+export type ClusterConfigRequest = z.infer<typeof ClusterConfigRequestSchema>;
+
+export const StartupPingRequestSchema = z.object({
+	config_hash: z.string().trim().length(64),
+});
+export type StartupPingRequest = z.infer<typeof StartupPingRequestSchema>;
+
+export const StartupPingResponseSchema = z.object({
+	up_to_date: z.boolean(),
+	cluster: z.unknown().optional(),
+	nodes: z.unknown().optional(),
+});
+export type StartupPingResponse = z.infer<typeof StartupPingResponseSchema>;

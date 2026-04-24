@@ -5,7 +5,8 @@ import os from "os";
 import fs from "fs";
 import path from "path";
 import { execFileSync } from "child_process";
-import { getClusterConfig, hasClusterConfig } from "../cluster/config";
+import fetch from "node-fetch";
+import { Cluster, getClusterConfig, hasClusterConfig } from "../cluster/config";
 import { NodeJoinRequestSchema } from "../models/networking";
 import { ClusterConfigError } from "../errors/configErrors";
 import { OutputStream } from "../app/daemon";
@@ -42,7 +43,7 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 		next(err);
 	});
 
-	app.post("/join", (req: express.Request, res: express.Response) => {
+	app.post("/join", async (req: express.Request, res: express.Response) => {
 		if (req.headers["x-auth-token"] !== token) {
 			return res.status(401).send("Authentication token is invalid, please try again.");
 		}
@@ -58,6 +59,7 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 
 		try {
 			clusterConfig.joinNode(joinRequestResult.data.hostname, normalizedIp, joinRequestResult.data.wg_public_key);
+			await pushConfigToCluster(clusterConfig, joinRequestResult.data.wg_public_key);
 			return res.json({
 				cluster: clusterConfig.getCopy(),
 				nodes: clusterConfig.getNodesCopy(),
@@ -132,4 +134,37 @@ function randomString(n: number): string {
 
 function normalizeIp(ip: string): string {
 	return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+}
+
+async function pushConfigToCluster(clusterConfig: Cluster, joinedNodeWireguardPublicKey: string): Promise<void> {
+	const configPayload = JSON.stringify({
+		cluster: clusterConfig.getCopy(),
+		nodes: clusterConfig.getNodesCopy(),
+	});
+
+	const nodesToUpdate = clusterConfig.nodes.filter((node) => node.id !== clusterConfig.coordinatorNode.id && node.wireguardPublicKey !== joinedNodeWireguardPublicKey);
+
+	await Promise.all(
+		nodesToUpdate.map(async (node) => {
+			try {
+				const updateResponse = await fetch(`http://${node.wireguardIp}:8080/set_config`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"x-access-key": clusterConfig.accessKey,
+					},
+					body: configPayload,
+				});
+
+				if (updateResponse.ok) {
+					return;
+				}
+
+				const responseBody = await updateResponse.text();
+				console.warn(`Failed to sync config to ${node.hostname} (${updateResponse.status}): ${responseBody}`);
+			} catch (error) {
+				console.warn(`Failed to sync config to ${node.hostname}: ${error instanceof Error ? error.message : "Unknown error."}`);
+			}
+		}),
+	);
 }

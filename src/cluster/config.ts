@@ -7,6 +7,9 @@ import { ClusterConfigError, MaximumNodesReachedError, NoClusterConfigError, Nod
 import { generateWireguardKeys, setupWireguardInterface, syncWireguardPeers } from "../adapters/wireguard";
 import { parseOrThrow } from "../utils/zod";
 import z from "zod";
+import fetch from "node-fetch";
+import { delay } from "../utils/misc";
+import { StartupPingResponseSchema } from "../models/networking";
 
 export const CONFIG_VERSION = 1;
 export const CONFIG_PATH_CLUSTER = "/etc/linux-paas/config.json";
@@ -14,6 +17,7 @@ export const CONFIG_PATH_NODES = "/etc/linux-paas/nodes.json";
 export const CONFIG_WIREGUARD_CIDR = 24;
 export const CONFIG_WIREGUARD_NETWORK_IP = [10, 0, 0, 0];
 export const CONFIG_WIREGUARD_LISTEN_PORT = 51820;
+const CONFIG_PING_RETRY_DELAY_MS = 5_000;
 
 export class ClusterNode {
 	private readonly config: NodeInfo;
@@ -187,6 +191,23 @@ function syncWireguardPeersFromClusterConfig(): void {
 	}
 }
 
+export function getConfigPayload(): { cluster: ClusterInfo; nodes: NodeInfo[] } {
+	if (!clusterConfigSingleton) {
+		throw new NoClusterConfigError();
+	}
+
+	return {
+		cluster: clusterConfigSingleton.getCopy(),
+		nodes: clusterConfigSingleton.getNodesCopy(),
+	};
+}
+
+export function getClusterConfigHash(): string {
+	const payload = getConfigPayload();
+	payload.nodes.sort((left, right) => left.node_id - right.node_id);
+	return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
 export function saveClusterConfigToDisk(config: Cluster): void {
 	const configCopy = config.getCopy();
 	const nodesCopy = config.getNodesCopy();
@@ -196,6 +217,13 @@ export function saveClusterConfigToDisk(config: Cluster): void {
 
 	fs.writeFileSync(CONFIG_PATH_CLUSTER, JSON.stringify(configCopy, null, 2));
 	fs.writeFileSync(CONFIG_PATH_NODES, JSON.stringify(nodesCopy, null, 2));
+}
+
+export function applyClusterConfig(clusterData: unknown, nodesData: unknown): Cluster {
+	const config = Cluster.fromJSON(clusterData, nodesData);
+	setClusterConfig(config);
+	saveClusterConfigToDisk(config);
+	return config;
 }
 
 export function setClusterConfig(config: Cluster): void {
@@ -215,6 +243,69 @@ export function getClusterConfig() {
 	return clusterConfigSingleton;
 }
 
+async function syncClusterConfigFromCoordinatorOnStartup(): Promise<void> {
+	while (true) {
+		if (!hasClusterConfig()) return;
+		const clusterConfig = getClusterConfig();
+		if (clusterConfig.coordinatorNode.hostname === os.hostname()) return;
+
+		await delay(1000);
+
+		try {
+			const startupPingResponse = await fetch(`http://${clusterConfig.coordinatorNode.wireguardIp}:8080/startup_ping`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-access-key": clusterConfig.accessKey,
+				},
+				body: JSON.stringify({ config_hash: getClusterConfigHash() }),
+			});
+
+			const responseBody = await startupPingResponse.text();
+
+			if (!startupPingResponse.ok) {
+				console.warn(`Failed startup ping (${startupPingResponse.status}): ${responseBody}. Retrying...`);
+				await delay(CONFIG_PING_RETRY_DELAY_MS);
+				continue;
+			}
+
+			let responseJson: unknown;
+			try {
+				responseJson = JSON.parse(responseBody);
+			} catch {
+				console.warn("Startup ping response is not valid JSON. Retrying...");
+				await delay(CONFIG_PING_RETRY_DELAY_MS);
+				continue;
+			}
+
+			const startupPingResponseResult = StartupPingResponseSchema.safeParse(responseJson);
+			if (!startupPingResponseResult.success) {
+				console.warn("Startup ping response is invalid. Retrying...");
+				await delay(CONFIG_PING_RETRY_DELAY_MS);
+				continue;
+			}
+
+			if (startupPingResponseResult.data.up_to_date) {
+				console.log("Cluster config has not changed since last connection.");
+				return;
+			}
+
+			if (startupPingResponseResult.data.cluster === undefined || startupPingResponseResult.data.nodes === undefined) {
+				console.warn("Startup ping response is missing cluster data. Retrying...");
+				await delay(CONFIG_PING_RETRY_DELAY_MS);
+				continue;
+			}
+
+			applyClusterConfig(startupPingResponseResult.data.cluster, startupPingResponseResult.data.nodes);
+			console.log("Synchronized cluster config on startup.");
+			return;
+		} catch (error) {
+			console.warn(`Coordinator is not ready for startup sync. Retrying...`);
+			await delay(CONFIG_PING_RETRY_DELAY_MS);
+		}
+	}
+}
+
 // Load cluster config from disk if there is one.
 if (fs.existsSync(CONFIG_PATH_CLUSTER)) {
 	const clusterConfigJson = JSON.parse(fs.readFileSync(CONFIG_PATH_CLUSTER, "utf8"));
@@ -228,3 +319,5 @@ if (fs.existsSync(CONFIG_PATH_CLUSTER)) {
 	clusterConfigSingleton = config;
 	syncWireguardPeersFromClusterConfig();
 }
+
+syncClusterConfigFromCoordinatorOnStartup();
