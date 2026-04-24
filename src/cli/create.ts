@@ -24,6 +24,7 @@ export async function createServerHandler(options: unknown, stream: OutputStream
 	const result = {
 		cluster: config.getCopy(),
 		nodes: config.getNodesCopy(),
+		services: config.getServicesCopy(),
 	};
 	stream.sendOutput(JSON.stringify(result, null, 2));
 }

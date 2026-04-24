@@ -19,3 +19,24 @@ export const ClusterInfoSchema = z.object({
 	leader_node_id: z.number().int().min(1).max(255).optional(),
 });
 export type ClusterInfo = z.infer<typeof ClusterInfoSchema>;
+
+export const WebServiceInfoSchema = z.object({
+	service_id: z.string().trim().min(1),
+	type: z.literal("web"),
+	image: z.string().trim().min(1),
+	domain: z.string().trim().min(1),
+	internal_port: z.number().int().min(1).max(65535),
+});
+export type WebServiceInfo = z.infer<typeof WebServiceInfoSchema>;
+
+export const PatroniServiceInfoSchema = z.object({
+	service_id: z.string().trim().min(1),
+	type: z.literal("patroni"),
+	sync_mode: z.enum(["async", "sync"]),
+	read_write_port: z.number().int().min(1).max(65535),
+	read_only_port: z.number().int().min(1).max(65535),
+});
+export type PatroniServiceInfo = z.infer<typeof PatroniServiceInfoSchema>;
+
+export const ClusterServiceSchema = z.discriminatedUnion("type", [WebServiceInfoSchema, PatroniServiceInfoSchema]);
+export type ClusterService = z.infer<typeof ClusterServiceSchema>;

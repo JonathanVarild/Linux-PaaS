@@ -12,6 +12,7 @@ export async function configServerHandler(_args: unknown, stream: OutputStream):
 			{
 				cluster: clusterConfig.getCopy(),
 				nodes: clusterConfig.getNodesCopy(),
+				services: clusterConfig.getServicesCopy(),
 			},
 			null,
 			2,

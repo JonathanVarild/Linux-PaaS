@@ -34,4 +34,41 @@ program
 		await sendIpcCommand("config", {});
 	});
 
+const deployCommand = program.command("deploy").description("Adds or updates desired service deployments in cluster config.");
+
+deployCommand
+	.command("web")
+	.description("Adds or updates a stateless web app deployment.")
+	.argument("<id>", "A unique identifier string for the web service.")
+	.argument("<image>", "The container image to deploy.")
+	.argument("<domain>", "The domain to route incoming traffic for this service.")
+	.argument("<internal-port>", "The port that the service listens on inside the container.")
+	.action(async (id: string, image: string, domain: string, internalPort: string) => {
+		const parsedPort = Number.parseInt(internalPort, 10);
+		if (!Number.isInteger(parsedPort) || parsedPort <= 0) {
+			throw new Error("Internal port must be a positive integer.");
+		}
+
+		await sendIpcCommand("deploy", {
+			type: "web",
+			id,
+			image,
+			domain,
+			internalPort: parsedPort,
+		});
+	});
+
+deployCommand
+	.command("patroni")
+	.description("Adds or updates a Patroni PostgreSQL deployment.")
+	.argument("<id>", "A unique identifier string for the PostgreSQL service.")
+	.option("--sync-mode <mode>", "Replication mode for the PostgreSQL service: async or sync.", "async")
+	.action(async (id: string, options: { syncMode: string }) => {
+		await sendIpcCommand("deploy", {
+			type: "patroni",
+			id,
+			syncMode: options.syncMode,
+		});
+	});
+
 void program.parseAsync();

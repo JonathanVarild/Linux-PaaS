@@ -12,6 +12,7 @@ export type NodeJoinRequest = z.infer<typeof NodeJoinRequestSchema>;
 export const ClusterConfigRequestSchema = z.object({
 	cluster: z.unknown(),
 	nodes: z.unknown(),
+	services: z.unknown().optional(),
 });
 export type ClusterConfigRequest = z.infer<typeof ClusterConfigRequestSchema>;
 
@@ -24,5 +25,6 @@ export const StartupPingResponseSchema = z.object({
 	up_to_date: z.boolean(),
 	cluster: z.unknown().optional(),
 	nodes: z.unknown().optional(),
+	services: z.unknown().optional(),
 });
 export type StartupPingResponse = z.infer<typeof StartupPingResponseSchema>;

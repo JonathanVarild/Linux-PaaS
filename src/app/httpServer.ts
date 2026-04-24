@@ -60,7 +60,7 @@ expressApp.post("/set_config", (req: express.Request, res: express.Response) => 
 	}
 
 	try {
-		applyClusterConfig(payloadResult.data.cluster, payloadResult.data.nodes);
+		applyClusterConfig(payloadResult.data.cluster, payloadResult.data.nodes, payloadResult.data.services);
 		res.status(204).send();
 	} catch {
 		res.status(400).send("Config update payload is invalid.");

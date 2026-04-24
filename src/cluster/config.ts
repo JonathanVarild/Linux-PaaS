@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import os from "os";
-import { ClusterInfo, ClusterInfoSchema, NodeInfo, NodeInfoSchema } from "../models/config";
+import { ClusterInfo, ClusterInfoSchema, ClusterService, ClusterServiceSchema, NodeInfo, NodeInfoSchema } from "../models/config";
 import { ClusterConfigError, MaximumNodesReachedError, NoClusterConfigError, NodeAlreadyExistsError } from "../errors/configErrors";
 import { generateWireguardKeys, setupWireguardInterface, syncWireguardPeers } from "../adapters/wireguard";
 import { parseOrThrow } from "../utils/zod";
@@ -14,6 +14,7 @@ import { StartupPingResponseSchema } from "../models/networking";
 export const CONFIG_VERSION = 1;
 export const CONFIG_PATH_CLUSTER = "/etc/linux-paas/config.json";
 export const CONFIG_PATH_NODES = "/etc/linux-paas/nodes.json";
+export const CONFIG_PATH_SERVICES = "/etc/linux-paas/services.json";
 export const CONFIG_WIREGUARD_CIDR = 24;
 export const CONFIG_WIREGUARD_NETWORK_IP = [10, 0, 0, 0];
 export const CONFIG_WIREGUARD_LISTEN_PORT = 51820;
@@ -69,11 +70,13 @@ export class ClusterNode {
 export class Cluster {
 	private config: ClusterInfo;
 	private nodes_internal: ClusterNode[];
+	private services_internal: ClusterService[];
 
-	private constructor(state: ClusterInfo, nodes: ClusterNode[] = []) {
+	private constructor(state: ClusterInfo, nodes: ClusterNode[] = [], services: ClusterService[] = []) {
 		parseOrThrow(ClusterInfoSchema, state, new ClusterConfigError());
 		this.config = state;
 		this.nodes_internal = nodes;
+		this.services_internal = services;
 		setupWireguardInterface();
 	}
 
@@ -93,15 +96,17 @@ export class Cluster {
 				leader_node_id: coordinatorNode.id,
 			},
 			[coordinatorNode],
+			[],
 		);
 	}
 
-	static fromJSON(clusterData: unknown, nodesData: unknown): Cluster {
+	static fromJSON(clusterData: unknown, nodesData: unknown, servicesData: unknown = []): Cluster {
 		const clusterInfo = parseOrThrow(ClusterInfoSchema, clusterData, new ClusterConfigError());
 		const nodesInfo = parseOrThrow(z.array(NodeInfoSchema).min(1), nodesData, new ClusterConfigError());
+		const servicesInfo = parseOrThrow(z.array(ClusterServiceSchema), servicesData, new ClusterConfigError());
 
 		const nodes = nodesInfo.map((nodeInfo) => new ClusterNode(nodeInfo));
-		return new Cluster(clusterInfo, nodes);
+		return new Cluster(clusterInfo, nodes, servicesInfo);
 	}
 
 	get clusterId(): string {
@@ -130,6 +135,10 @@ export class Cluster {
 
 	get nodes(): ClusterNode[] {
 		return [...this.nodes_internal];
+	}
+
+	get services(): ClusterService[] {
+		return [...this.services_internal];
 	}
 
 	joinNode(hostname: string, publicIp: string, wgPublicKey: string): void {
@@ -161,12 +170,32 @@ export class Cluster {
 		syncWireguardPeersFromClusterConfig();
 	}
 
+	setService(service: ClusterService): void {
+		parseOrThrow(ClusterServiceSchema, service, new ClusterConfigError());
+
+		const existingServiceIndex = this.services_internal.findIndex(
+			(existingService) => existingService.service_id === service.service_id && existingService.type === service.type,
+		);
+		if (existingServiceIndex === -1) {
+			this.services_internal.push(service);
+		} else {
+			this.services_internal[existingServiceIndex] = service;
+		}
+
+		this.config.updated_at = new Date().toISOString();
+		saveClusterConfigToDisk(this);
+	}
+
 	getCopy(): ClusterInfo {
 		return { ...this.config };
 	}
 
 	getNodesCopy(): NodeInfo[] {
 		return this.nodes_internal.map((node) => node.getCopy());
+	}
+
+	getServicesCopy(): ClusterService[] {
+		return this.services_internal.map((service) => ({ ...service }));
 	}
 }
 
@@ -191,7 +220,7 @@ function syncWireguardPeersFromClusterConfig(): void {
 	}
 }
 
-export function getConfigPayload(): { cluster: ClusterInfo; nodes: NodeInfo[] } {
+export function getConfigPayload(): { cluster: ClusterInfo; nodes: NodeInfo[]; services: ClusterService[] } {
 	if (!clusterConfigSingleton) {
 		throw new NoClusterConfigError();
 	}
@@ -199,31 +228,71 @@ export function getConfigPayload(): { cluster: ClusterInfo; nodes: NodeInfo[] } 
 	return {
 		cluster: clusterConfigSingleton.getCopy(),
 		nodes: clusterConfigSingleton.getNodesCopy(),
+		services: clusterConfigSingleton.getServicesCopy(),
 	};
 }
 
 export function getClusterConfigHash(): string {
 	const payload = getConfigPayload();
 	payload.nodes.sort((left, right) => left.node_id - right.node_id);
+	payload.services.sort((left, right) => left.service_id.localeCompare(right.service_id));
 	return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
 
 export function saveClusterConfigToDisk(config: Cluster): void {
 	const configCopy = config.getCopy();
 	const nodesCopy = config.getNodesCopy();
+	const servicesCopy = config.getServicesCopy();
 
 	fs.mkdirSync(path.dirname(CONFIG_PATH_CLUSTER), { recursive: true });
 	fs.mkdirSync(path.dirname(CONFIG_PATH_NODES), { recursive: true });
+	fs.mkdirSync(path.dirname(CONFIG_PATH_SERVICES), { recursive: true });
 
 	fs.writeFileSync(CONFIG_PATH_CLUSTER, JSON.stringify(configCopy, null, 2));
 	fs.writeFileSync(CONFIG_PATH_NODES, JSON.stringify(nodesCopy, null, 2));
+	fs.writeFileSync(CONFIG_PATH_SERVICES, JSON.stringify(servicesCopy, null, 2));
 }
 
-export function applyClusterConfig(clusterData: unknown, nodesData: unknown): Cluster {
-	const config = Cluster.fromJSON(clusterData, nodesData);
+export function applyClusterConfig(clusterData: unknown, nodesData: unknown, servicesData: unknown = []): Cluster {
+	const config = Cluster.fromJSON(clusterData, nodesData, servicesData);
 	setClusterConfig(config);
 	saveClusterConfigToDisk(config);
 	return config;
+}
+
+export async function syncConfigToCluster(clusterConfig: Cluster, ignoredNodeIds: number[] = []): Promise<void> {
+	const configPayload = JSON.stringify({
+		cluster: clusterConfig.getCopy(),
+		nodes: clusterConfig.getNodesCopy(),
+		services: clusterConfig.getServicesCopy(),
+	});
+
+	const ignoredNodeSet = new Set(ignoredNodeIds);
+	const nodesToUpdate = clusterConfig.nodes.filter((node) => node.id !== clusterConfig.coordinatorNode.id && !ignoredNodeSet.has(node.id));
+
+	await Promise.all(
+		nodesToUpdate.map(async (node) => {
+			try {
+				const updateResponse = await fetch(`http://${node.wireguardIp}:8080/set_config`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"x-access-key": clusterConfig.accessKey,
+					},
+					body: configPayload,
+				});
+
+				if (updateResponse.ok) {
+					return;
+				}
+
+				const responseBody = await updateResponse.text();
+				console.warn(`Failed to sync config to ${node.hostname} (${updateResponse.status}): ${responseBody}`);
+			} catch (error) {
+				console.warn(`Failed to sync config to ${node.hostname}: ${error instanceof Error ? error.message : "Unknown error."}`);
+			}
+		}),
+	);
 }
 
 export function setClusterConfig(config: Cluster): void {
@@ -296,7 +365,7 @@ async function syncClusterConfigFromCoordinatorOnStartup(): Promise<void> {
 				continue;
 			}
 
-			applyClusterConfig(startupPingResponseResult.data.cluster, startupPingResponseResult.data.nodes);
+			applyClusterConfig(startupPingResponseResult.data.cluster, startupPingResponseResult.data.nodes, startupPingResponseResult.data.services);
 			console.log("Synchronized cluster config on startup.");
 			return;
 		} catch (error) {
@@ -315,7 +384,12 @@ if (fs.existsSync(CONFIG_PATH_CLUSTER)) {
 		clusterNodesJson = JSON.parse(fs.readFileSync(CONFIG_PATH_NODES, "utf8"));
 	}
 
-	const config = Cluster.fromJSON(clusterConfigJson, clusterNodesJson);
+	let clusterServicesJson = [];
+	if (fs.existsSync(CONFIG_PATH_SERVICES)) {
+		clusterServicesJson = JSON.parse(fs.readFileSync(CONFIG_PATH_SERVICES, "utf8"));
+	}
+
+	const config = Cluster.fromJSON(clusterConfigJson, clusterNodesJson, clusterServicesJson);
 	clusterConfigSingleton = config;
 	syncWireguardPeersFromClusterConfig();
 }

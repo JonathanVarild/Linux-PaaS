@@ -17,6 +17,7 @@ const JoinBundleSchema = z.object({
 const JoinResponseSchema = z.object({
 	cluster: z.unknown(),
 	nodes: z.unknown(),
+	services: z.unknown().optional(),
 });
 
 export async function joinServerHandler(args: unknown, stream: OutputStream): Promise<string> {
@@ -58,7 +59,7 @@ export async function joinServerHandler(args: unknown, stream: OutputStream): Pr
 		}
 
 		const joinResponseValue = parseOrThrowWithMessage(JoinResponseSchema, JSON.parse(responseBody));
-		const joinedClusterConfig = applyClusterConfig(joinResponseValue.cluster, joinResponseValue.nodes);
+		const joinedClusterConfig = applyClusterConfig(joinResponseValue.cluster, joinResponseValue.nodes, joinResponseValue.services);
 
 		const joinedNode = joinedClusterConfig.nodes.find((node) => node.wireguardPublicKey === wgPublicKey);
 		if (!joinedNode) {

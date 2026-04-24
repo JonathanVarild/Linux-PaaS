@@ -10,6 +10,7 @@
 		"config": "tsx src/cli.ts config",
 		"accept": "tsx src/cli.ts accept",
 		"join": "tsx src/cli.ts join",
+		"deploy": "tsx src/cli.ts deploy",
 		"redeploy": "docker compose down && docker compose up -d --build",
 		"shell1": "docker compose exec worker-1 /bin/bash",
 		"shell2": "docker compose exec worker-2 /bin/bash",
