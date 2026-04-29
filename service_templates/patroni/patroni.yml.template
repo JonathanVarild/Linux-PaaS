@@ -1,0 +1,46 @@
+scope: {SERVICE_ID}
+name: node-{LOCAL_NODE_ID}
+
+restapi:
+  listen: 0.0.0.0:{PATRONI_REST_PORT}
+  connect_address: {INTERNAL_IP}:{PATRONI_REST_PORT}
+
+etcd3:
+  hosts: {ETCD_HOSTS}
+
+bootstrap:
+  dcs:
+    ttl: 20
+    loop_wait: 5
+    retry_timeout: 5
+    synchronous_mode: {SYNCHRONOUS_MODE}
+    postgresql:
+      use_pg_rewind: true
+      pg_hba:
+{BOOTSTRAP_PG_HBA_RULES}
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+  users:
+    admin:
+      password: {ADMIN_PASSWORD}
+      options:
+        - createrole
+        - createdb
+
+postgresql:
+  listen: 0.0.0.0:{POSTGRES_PORT}
+  connect_address: {INTERNAL_IP}:{POSTGRES_PORT}
+  data_dir: /home/postgres/pgdata/pgroot/data
+  bin_dir: /usr/lib/postgresql/16/bin
+  authentication:
+    superuser:
+      username: postgres
+      password: {POSTGRES_PASSWORD}
+    replication:
+      username: replicator
+      password: {REPLICATOR_PASSWORD}
+  pg_hba:
+{POSTGRESQL_PG_HBA_RULES}
+  parameters:
+    unix_socket_directories: '/var/run/postgresql'

@@ -1,0 +1,8 @@
+services:
+  haproxy:
+    image: haproxy:3.2
+    restart: unless-stopped
+    network_mode: host
+    user: "0:0"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro

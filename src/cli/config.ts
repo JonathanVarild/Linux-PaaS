@@ -1,6 +1,7 @@
 import { getClusterConfig, hasClusterConfig } from "../cluster/config";
 import { OutputStream } from "../app/daemon";
 
+// Command handler for viewing the current cluster configuration.
 export async function configServerHandler(_args: unknown, stream: OutputStream): Promise<void> {
 	if (!hasClusterConfig()) {
 		throw new Error("Create a new cluster before viewing configuration.");

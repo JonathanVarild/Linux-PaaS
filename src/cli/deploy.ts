@@ -2,17 +2,15 @@ import os from "os";
 import { z } from "zod";
 import { OutputStream } from "../app/daemon";
 import { getClusterConfig, hasClusterConfig, syncConfigToCluster } from "../cluster/config";
-import { ClusterService } from "../models/config";
+import { ServiceIdSchema } from "../models/config";
+import { getPatroniPassword } from "../utils/credentials";
 import { parseOrThrowWithMessage } from "../utils/zod";
 
-const DEFAULT_PATRONI_READ_WRITE_PORT = 5432;
-const DEFAULT_PATRONI_READ_ONLY_PORT = 5433;
-type PatroniService = Extract<ClusterService, { type: "patroni" }>;
-
+// Schema for validating a web service or patroni service deployment.
 const DeployOptionsSchema = z.discriminatedUnion("type", [
 	z.object({
 		type: z.literal("web"),
-		id: z.string().trim().min(1),
+		id: ServiceIdSchema,
 		image: z.string().trim().min(1),
 		domain: z
 			.string()
@@ -22,62 +20,43 @@ const DeployOptionsSchema = z.discriminatedUnion("type", [
 	}),
 	z.object({
 		type: z.literal("patroni"),
-		id: z.string().trim().min(1),
+		id: ServiceIdSchema,
 		syncMode: z.enum(["async", "sync"]),
 	}),
 ]);
 
+// Command handler for deploying a service to the cluster.
 export async function deployServiceHandler(args: unknown, stream: OutputStream): Promise<void> {
 	if (!hasClusterConfig()) {
 		throw new Error("Create a new cluster before deploying services.");
 	}
 
+	// Ensure the command is being run on coordinator.
 	const clusterConfig = getClusterConfig();
 	if (clusterConfig.coordinatorNode.hostname !== os.hostname()) {
 		throw new Error("Only the coordinator node can deploy services.");
 	}
 
+	// Validate request data.
 	const options = parseOrThrowWithMessage(DeployOptionsSchema, args);
-	let service: ClusterService;
+	let service;
+
+	// Check if we are deploying a web or patroni service and call the appropriate function.
 	if (options.type === "web") {
-		service = {
-			service_id: options.id,
-			type: "web",
-			image: options.image,
-			domain: options.domain,
-			internal_port: options.internalPort,
-		};
+		service = getClusterConfig().setWebService(options.id, options.image, options.domain, options.internalPort);
 	} else {
-		const existingService = clusterConfig.services.find((service): service is PatroniService => service.type === "patroni" && service.service_id === options.id);
-		let readWritePort = existingService?.read_write_port ?? DEFAULT_PATRONI_READ_WRITE_PORT;
-		let readOnlyPort = existingService?.read_only_port ?? DEFAULT_PATRONI_READ_ONLY_PORT;
-
-		const usedPorts = new Set<number>();
-		for (const service of clusterConfig.services) {
-			if (service.type !== "patroni" || service.service_id !== options.id) continue;
-			usedPorts.add(service.read_write_port);
-			usedPorts.add(service.read_only_port);
-		}
-
-		while (usedPorts.has(readWritePort) || usedPorts.has(readOnlyPort)) {
-			readWritePort += 2;
-			readOnlyPort += 2;
-			if (readOnlyPort > 65535) {
-				throw new Error("No available Patroni port pair could be assigned.");
-			}
-		}
-
-		service = {
-			service_id: options.id,
-			type: "patroni",
-			sync_mode: options.syncMode,
-			read_write_port: readWritePort,
-			read_only_port: readOnlyPort,
-		};
+		service = getClusterConfig().setPatroniService(options.id, options.syncMode);
 	}
 
-	clusterConfig.setService(service);
+	// Sync the configuration to the rest of the cluster.
 	await syncConfigToCluster(clusterConfig);
 
-	stream.sendOutput(JSON.stringify(service, null, 2));
+	console.log(`[deploy] Setting ${service.type} service '${service.service_id}'.`);
+	stream.sendOutput(`Service '${service.service_id}' has been scheduled for deployment.`);
+
+	// Show database details if its a patroni service.
+	if (service.type === "patroni") {
+		stream.sendOutput(`Database admin credentials:\nusername: admin\npassword: ${getPatroniPassword(clusterConfig.accessKey, service.service_id, "admin")}`);
+		stream.sendOutput(`Database ports:\nread-write: ${service.read_write_port}\nread-only: ${service.read_only_port}`);
+	}
 }

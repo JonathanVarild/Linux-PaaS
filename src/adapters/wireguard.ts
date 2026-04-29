@@ -1,34 +1,24 @@
 import { execFileSync } from "child_process";
 import fs from "fs";
-import os from "os";
 import path from "path";
-import {
-	FailedToGenerateWireguardKeysError,
-	FailedToAddWireguardPeerError,
-	FailedToReadWireguardPeersError,
-	FailedToRemoveWireguardPeerError,
-	FailedToGetLocalWireguardAddressError,
-} from "../errors/adapterErrors";
+import { FailedToGenerateWireguardKeysError, FailedToAddWireguardPeerError, FailedToReadWireguardPeersError, FailedToRemoveWireguardPeerError } from "../errors/adapterErrors";
 import { getClusterConfig, hasClusterConfig } from "../cluster/config";
+import { WIREGUARD_CIDR, WIREGUARD_INTERFACE, WIREGUARD_LISTEN_PORT, WIREGUARD_PRIVATE_KEY_PATH } from "../constants";
 
+// Type for Wireguard peer information.
 export type WireguardPeer = {
 	publicKey: string;
 	endpoint: string;
 	allowedIp: string;
 };
 
-const WIREGUARD_INTERFACE = process.env.WIREGUARD_INTERFACE ?? "wg0";
-const WIREGUARD_PEER_KEEPALIVE_SECONDS = "25";
-const WIREGUARD_LISTEN_PORT = "51820";
-const WIREGUARD_PRIVATE_KEY_PATH = "/etc/linux-paas/private.key";
-
-function shouldExecuteWireguardCommands(): boolean {
-	return process.env.NODE_ENV === "production" || process.env.NODE_ENV === "docker_dev";
-}
-
+/**
+ * Function to generate a WireGuard key pair, but only return the public key.
+ * Private key is stored on disk.
+ * @returns The generated WireGuard public key.
+ * @throws {FailedToGenerateWireguardKeysError} If key generation fails.
+ */
 export function generateWireguardKeys(): string {
-	if (!shouldExecuteWireguardCommands()) return "DEVELOPMENT_PUBLIC_KEY";
-
 	const privateKey = getWireguardPrivateKey();
 	if (!privateKey) {
 		throw new FailedToGenerateWireguardKeysError("Failed to generate WireGuard private key.");
@@ -46,6 +36,11 @@ export function generateWireguardKeys(): string {
 	return publicKey;
 }
 
+/**
+ * Function used to retrieve the WireGuard private key from disk or generate a new one if it doesn't exist.
+ * @returns The WireGuard private key.
+ * @throws {FailedToGenerateWireguardKeysError} If key generation fails.
+ */
 function getWireguardPrivateKey(): string {
 	fs.mkdirSync(path.dirname(WIREGUARD_PRIVATE_KEY_PATH), { recursive: true });
 
@@ -63,51 +58,40 @@ function getWireguardPrivateKey(): string {
 	return privateKey;
 }
 
-function getLocalWireguardAddress(): string {
-	const localNode = getClusterConfig().nodes.find((node) => node.hostname === os.hostname());
-	if (!localNode) {
-		throw new FailedToGetLocalWireguardAddressError();
-	}
-
-	return `${localNode.wireguardIp}/24`;
-}
-
+/**
+ * Function to configure the Wireguard interface with the keys, ports, and IPs.
+ */
 function configureWireguardInterface(): void {
 	getWireguardPrivateKey();
-	execFileSync("wg", ["set", WIREGUARD_INTERFACE, "private-key", WIREGUARD_PRIVATE_KEY_PATH, "listen-port", WIREGUARD_LISTEN_PORT], {
+	execFileSync("wg", ["set", WIREGUARD_INTERFACE, "private-key", WIREGUARD_PRIVATE_KEY_PATH, "listen-port", String(WIREGUARD_LISTEN_PORT)], {
 		stdio: "ignore",
 	});
-	execFileSync("ip", ["address", "replace", getLocalWireguardAddress(), "dev", WIREGUARD_INTERFACE], { stdio: "ignore" });
+	execFileSync("ip", ["address", "replace", `${getClusterConfig().getLocalNode().wireguardIp}/${WIREGUARD_CIDR}`, "dev", WIREGUARD_INTERFACE], { stdio: "ignore" });
 }
 
-export function addWireguardPeer(peer: WireguardPeer): void {
-	if (!shouldExecuteWireguardCommands()) return;
-
+/**
+ * Function used to add a new WireGuard peer to the interface.
+ * @param peer The WireGuard peer information to add.
+ * @throws {FailedToAddWireguardPeerError} If adding the peer fails.
+ */
+function addWireguardPeer(peer: WireguardPeer): void {
 	console.log(`Added ${peer.endpoint} (${peer.publicKey}) to ${peer.allowedIp}.`);
 
 	try {
-		execFileSync("wg", [
-			"set",
-			WIREGUARD_INTERFACE,
-			"peer",
-			peer.publicKey,
-			"endpoint",
-			peer.endpoint,
-			"allowed-ips",
-			peer.allowedIp,
-			"persistent-keepalive",
-			WIREGUARD_PEER_KEEPALIVE_SECONDS,
-		]);
+		execFileSync("wg", ["set", WIREGUARD_INTERFACE, "peer", peer.publicKey, "endpoint", peer.endpoint, "allowed-ips", peer.allowedIp, "persistent-keepalive", "25"]);
 	} catch (error) {
 		throw new FailedToAddWireguardPeerError(peer);
 	}
 }
 
+/**
+ * Removed or adds WireGuard peers to match the provided list of peers.
+ * @param peers The peers to synchronize with the WireGuard interface.
+ * @throws {FailedToReadWireguardPeersError} If reading current peers from the Wireguard interface fails.
+ * @throws {FailedToRemoveWireguardPeerError} If removing a peer fails.
+ * @throws {FailedToAddWireguardPeerError} If adding a peer fails.
+ */
 export function syncWireguardPeers(peers: WireguardPeer[]): void {
-	if (!shouldExecuteWireguardCommands()) {
-		return;
-	}
-
 	configureWireguardInterface();
 
 	const peersToAdd = new Map<string, WireguardPeer>();
@@ -141,8 +125,11 @@ export function syncWireguardPeers(peers: WireguardPeer[]): void {
 	}
 }
 
+/**
+ * Function to set up all WireGuard interface configurations, enable it, etc.
+ */
 export function setupWireguardInterface(): void {
-	if (!shouldExecuteWireguardCommands() || !hasClusterConfig()) return;
+	if (!hasClusterConfig()) return;
 
 	let interfaceExists = false;
 	try {
@@ -162,4 +149,5 @@ export function setupWireguardInterface(): void {
 	}
 }
 
+// Set up the interface on startup.
 setupWireguardInterface();

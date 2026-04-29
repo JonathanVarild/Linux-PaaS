@@ -27,10 +27,3 @@ export class FailedToRemoveWireguardPeerError extends Error {
 		this.name = "FailedToRemoveWireguardPeerError";
 	}
 }
-
-export class FailedToGetLocalWireguardAddressError extends Error {
-	constructor() {
-		super("Failed to get local WireGuard address from cluster configuration.");
-		this.name = "FailedToGetLocalWireguardAddressError";
-	}
-}

@@ -1,0 +1,12 @@
+services:
+  etcd:
+    image: gcr.io/etcd-development/etcd:v3.5.29
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      ETCD_DATA_DIR: /etcd-data
+    volumes:
+      - ./etcd-data:/etcd-data
+    command: /usr/local/bin/etcd

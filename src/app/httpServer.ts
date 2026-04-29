@@ -2,6 +2,7 @@ import express from "express";
 import os from "os";
 import { applyClusterConfig, getClusterConfig, getClusterConfigHash, getConfigPayload, hasClusterConfig } from "../cluster/config";
 import { ClusterConfigRequestSchema, StartupPingRequestSchema } from "../models/networking";
+import { HTTP_DAEMON_PORT } from "../constants";
 
 export const expressApp = express();
 
@@ -15,6 +16,7 @@ expressApp.use((err: Error, _req: express.Request, res: express.Response, next: 
 	next(err);
 });
 
+// Middleware to validate access token and that cluster config is available.
 expressApp.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
 	if (!hasClusterConfig()) {
 		res.status(503).send("Cluster configuration is not available.");
@@ -28,6 +30,9 @@ expressApp.use((req: express.Request, res: express.Response, next: express.NextF
 	next();
 });
 
+/**
+ * Endpoint for coordinator where nodes send a startup ping to check if their config is up to date and to retrieve the latest config if not.
+ */
 expressApp.post("/startup_ping", (req: express.Request, res: express.Response) => {
 	const startupPingRequestResult = StartupPingRequestSchema.safeParse(req.body);
 	if (!startupPingRequestResult.success) {
@@ -52,6 +57,9 @@ expressApp.post("/startup_ping", (req: express.Request, res: express.Response) =
 	});
 });
 
+/**
+ * Endpoint for nodes to receive cluster config updates from coordinator.
+ */
 expressApp.post("/set_config", (req: express.Request, res: express.Response) => {
 	const payloadResult = ClusterConfigRequestSchema.safeParse(req.body);
 	if (!payloadResult.success) {
@@ -67,6 +75,6 @@ expressApp.post("/set_config", (req: express.Request, res: express.Response) => 
 	}
 });
 
-expressApp.listen(8080, () => {
-	console.log("HTTP server is listening on port 8080");
+expressApp.listen(HTTP_DAEMON_PORT, () => {
+	console.log(`HTTP server is listening on port ${HTTP_DAEMON_PORT}`);
 });

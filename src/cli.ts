@@ -1,6 +1,9 @@
 import { Command } from "commander";
 import { sendIpcCommand } from "./utils/ipc";
-import { getPublicIP } from "./utils/ip";
+import { getPublicIP } from "./utils/networking";
+import { validateEnvironment } from "./utils/misc";
+
+validateEnvironment();
 
 const program = new Command();
 
@@ -71,4 +74,4 @@ deployCommand
 		});
 	});
 
-void program.parseAsync();
+program.parseAsync();

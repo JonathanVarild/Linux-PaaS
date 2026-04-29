@@ -1,0 +1,24 @@
+frontend patroni_{HAPROXY_NAME}_rw_front
+    mode tcp
+    bind *:{READ_WRITE_PORT}
+    default_backend patroni_{HAPROXY_NAME}_rw
+
+frontend patroni_{HAPROXY_NAME}_ro_front
+    mode tcp
+    bind *:{READ_ONLY_PORT}
+    default_backend patroni_{HAPROXY_NAME}_ro
+
+backend patroni_{HAPROXY_NAME}_rw
+    mode tcp
+    option httpchk OPTIONS /primary
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+{RW_SERVER_LINES}
+
+backend patroni_{HAPROXY_NAME}_ro
+    mode tcp
+    balance roundrobin
+    option httpchk OPTIONS /read-only
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+{RO_SERVER_LINES}

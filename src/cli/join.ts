@@ -8,23 +8,27 @@ import { generateWireguardKeys } from "../adapters/wireguard";
 import { OutputStream } from "../app/daemon";
 import { parseOrThrowWithMessage } from "../utils/zod";
 
+// Schema for validating the join bundle.
 const JoinBundleSchema = z.object({
 	url: z.string(),
 	token: z.string(),
 	cert_pem: z.string(),
 });
 
+// Schema for validating the returned data from the coordinator after successfull join.
 const JoinResponseSchema = z.object({
 	cluster: z.unknown(),
 	nodes: z.unknown(),
 	services: z.unknown().optional(),
 });
 
+// Command handler for joining a node to a cluster.
 export async function joinServerHandler(args: unknown, stream: OutputStream): Promise<string> {
 	if (hasClusterConfig()) {
 		throw new Error("Cluster configuration already exists.");
 	}
 
+	// Parse and validate join bundle passed from command args.
 	let bundleValue: unknown;
 	try {
 		bundleValue = JSON.parse(args as string);
@@ -32,15 +36,20 @@ export async function joinServerHandler(args: unknown, stream: OutputStream): Pr
 		throw new Error("bundle-json must be valid JSON.");
 	}
 
+	// Validate the provided bundle JSON.
 	const bundle = parseOrThrowWithMessage(JoinBundleSchema, bundleValue);
+
+	// Generate a wireguard key pair for the local node used for joining the Wireguard network.
 	const wgPublicKey = generateWireguardKeys();
 
+	// Prepare join request.
 	const joinRequest: NodeJoinRequest = {
 		hostname: os.hostname(),
 		wg_public_key: wgPublicKey,
 	};
 	const body = JSON.stringify(joinRequest);
 
+	// Make join HTTPS request using self-signed certificate public key.
 	const httpsAgent = new https.Agent({ ca: bundle.cert_pem });
 	try {
 		const result = await fetch(bundle.url, {
@@ -58,15 +67,11 @@ export async function joinServerHandler(args: unknown, stream: OutputStream): Pr
 			throw new Error(`Failed to join cluster network (${result.status}): ${responseBody}`);
 		}
 
+		// Parse and validate the response and then apply config to local node.
 		const joinResponseValue = parseOrThrowWithMessage(JoinResponseSchema, JSON.parse(responseBody));
 		const joinedClusterConfig = applyClusterConfig(joinResponseValue.cluster, joinResponseValue.nodes, joinResponseValue.services);
 
-		const joinedNode = joinedClusterConfig.nodes.find((node) => node.wireguardPublicKey === wgPublicKey);
-		if (!joinedNode) {
-			throw new Error("Could not find local node in new cluster configuration after joining.");
-		}
-
-		stream.sendOutput(`Successfully joined cluster as node #${joinedNode.id}.\n`);
+		stream.sendOutput(`Successfully joined cluster as node #${joinedClusterConfig.getLocalNode().id}.\n`);
 		return responseBody;
 	} catch (error) {
 		throw new Error(`Failed to join cluster network: ${error instanceof Error ? error.message : "Unknown error"}`);

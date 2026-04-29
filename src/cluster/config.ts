@@ -2,23 +2,47 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import os from "os";
-import { ClusterInfo, ClusterInfoSchema, ClusterService, ClusterServiceSchema, NodeInfo, NodeInfoSchema } from "../models/config";
-import { ClusterConfigError, MaximumNodesReachedError, NoClusterConfigError, NodeAlreadyExistsError } from "../errors/configErrors";
+import {
+	ClusterInfo,
+	ClusterInfoSchema,
+	ClusterService,
+	ClusterServiceSchema,
+	ClusterServices,
+	ClusterServicesSchema,
+	NodeInfo,
+	NodeInfoSchema,
+	PatroniService,
+	WebService,
+} from "../models/config";
+import {
+	ClusterConfigError,
+	CouldNotFindNodeError,
+	MaximumNodesReachedError,
+	NoClusterConfigError,
+	NodeAlreadyExistsError,
+	ServiceIdConflictError,
+	ServicePortAllocationError,
+} from "../errors/configErrors";
 import { generateWireguardKeys, setupWireguardInterface, syncWireguardPeers } from "../adapters/wireguard";
 import { parseOrThrow } from "../utils/zod";
 import z from "zod";
 import fetch from "node-fetch";
 import { delay } from "../utils/misc";
 import { StartupPingResponseSchema } from "../models/networking";
-
-export const CONFIG_VERSION = 1;
-export const CONFIG_PATH_CLUSTER = "/etc/linux-paas/config.json";
-export const CONFIG_PATH_NODES = "/etc/linux-paas/nodes.json";
-export const CONFIG_PATH_SERVICES = "/etc/linux-paas/services.json";
-export const CONFIG_WIREGUARD_CIDR = 24;
-export const CONFIG_WIREGUARD_NETWORK_IP = [10, 0, 0, 0];
-export const CONFIG_WIREGUARD_LISTEN_PORT = 51820;
-const CONFIG_PING_RETRY_DELAY_MS = 5_000;
+import { setupServices } from "./serviceDeployment";
+import {
+	CONFIG_PATH_CONFIG,
+	CONFIG_PATH_NODES,
+	CONFIG_PATH_SERVICES,
+	CONFIG_PING_RETRY_DELAY_MS,
+	CONFIG_VERSION,
+	HTTP_DAEMON_PORT,
+	PATRONI_PORT_START,
+	PATRONI_REST_PORT_START,
+	WEB_EXPOSED_PORT_START,
+	WIREGUARD_LISTEN_PORT,
+	WIREGUARD_NETWORK_PREFIX,
+} from "../constants";
 
 export class ClusterNode {
 	private readonly config: NodeInfo;
@@ -55,11 +79,7 @@ export class ClusterNode {
 	}
 
 	get wireguardIp(): string {
-		return `${CONFIG_WIREGUARD_NETWORK_IP[0]}.${CONFIG_WIREGUARD_NETWORK_IP[1]}.${CONFIG_WIREGUARD_NETWORK_IP[2]}.${this.config.node_id}`;
-	}
-
-	get wireguardEndpoint(): string {
-		return `${this.wireguardIp}:${CONFIG_WIREGUARD_LISTEN_PORT}`;
+		return `${WIREGUARD_NETWORK_PREFIX}.${this.config.node_id}`;
 	}
 
 	getCopy(): NodeInfo {
@@ -70,13 +90,14 @@ export class ClusterNode {
 export class Cluster {
 	private config: ClusterInfo;
 	private nodes_internal: ClusterNode[];
-	private services_internal: ClusterService[];
+	private services_internal: ClusterServices;
 
-	private constructor(state: ClusterInfo, nodes: ClusterNode[] = [], services: ClusterService[] = []) {
+	private constructor(state: ClusterInfo, nodes: ClusterNode[] = [], services: ClusterServices = {}) {
 		parseOrThrow(ClusterInfoSchema, state, new ClusterConfigError());
 		this.config = state;
-		this.nodes_internal = nodes;
+		this.nodes_internal = sortClusterNodes(nodes);
 		this.services_internal = services;
+		validateClusterConfig(this.config, this.nodes_internal);
 		setupWireguardInterface();
 	}
 
@@ -96,14 +117,14 @@ export class Cluster {
 				leader_node_id: coordinatorNode.id,
 			},
 			[coordinatorNode],
-			[],
+			{},
 		);
 	}
 
-	static fromJSON(clusterData: unknown, nodesData: unknown, servicesData: unknown = []): Cluster {
+	static fromJSON(clusterData: unknown, nodesData: unknown, servicesData: unknown = {}): Cluster {
 		const clusterInfo = parseOrThrow(ClusterInfoSchema, clusterData, new ClusterConfigError());
 		const nodesInfo = parseOrThrow(z.array(NodeInfoSchema).min(1), nodesData, new ClusterConfigError());
-		const servicesInfo = parseOrThrow(z.array(ClusterServiceSchema), servicesData, new ClusterConfigError());
+		const servicesInfo = parseOrThrow(ClusterServicesSchema, servicesData, new ClusterConfigError());
 
 		const nodes = nodesInfo.map((nodeInfo) => new ClusterNode(nodeInfo));
 		return new Cluster(clusterInfo, nodes, servicesInfo);
@@ -137,15 +158,34 @@ export class Cluster {
 		return [...this.nodes_internal];
 	}
 
-	get services(): ClusterService[] {
-		return [...this.services_internal];
+	getNodeById(nodeId: number): ClusterNode | null {
+		return this.nodes_internal.find((node) => node.id === nodeId) ?? null;
+	}
+
+	getNodeByHostname(hostname: string): ClusterNode | null {
+		return this.nodes_internal.find((node) => node.hostname === hostname) ?? null;
+	}
+
+	getLocalNode(): ClusterNode {
+		const localNode = this.getNodeByHostname(os.hostname());
+		if (!localNode) throw new CouldNotFindNodeError();
+		return localNode;
+	}
+
+	isCoordinatorNode(node: ClusterNode): boolean {
+		return this.coordinatorNode.id === node.id;
+	}
+
+	getSortedServices(): Array<[string, ClusterService]> {
+		return Object.entries(this.services_internal).sort(([left], [right]) => left.localeCompare(right));
 	}
 
 	joinNode(hostname: string, publicIp: string, wgPublicKey: string): void {
-		const wireguardIpExists = this.nodes_internal.some((node) => node.wireguardPublicKey === wgPublicKey);
+		const hostnameExists = this.nodes_internal.some((node) => node.hostname === hostname);
+		const wireguardPublicKeyExists = this.nodes_internal.some((node) => node.wireguardPublicKey === wgPublicKey);
 		const publicIpExists = this.nodes_internal.some((node) => node.publicIp === publicIp);
 
-		if (wireguardIpExists || publicIpExists) {
+		if (hostnameExists || wireguardPublicKeyExists || publicIpExists) {
 			throw new NodeAlreadyExistsError();
 		}
 
@@ -165,25 +205,63 @@ export class Cluster {
 		const newNode = ClusterNode.create(nextNodeId, hostname, publicIp, wgPublicKey);
 
 		this.nodes_internal.push(newNode);
+		this.nodes_internal = sortClusterNodes(this.nodes_internal);
 		this.config.updated_at = new Date().toISOString();
 		saveClusterConfigToDisk(this);
 		syncWireguardPeersFromClusterConfig();
 	}
 
-	setService(service: ClusterService): void {
-		parseOrThrow(ClusterServiceSchema, service, new ClusterConfigError());
+	setWebService(service_id: string, image: string, domain: string, internal_port: number): WebService {
+		const existingService = this.getService(service_id);
+		if (existingService && existingService.type !== "web") throw new ServiceIdConflictError(service_id);
 
-		const existingServiceIndex = this.services_internal.findIndex(
-			(existingService) => existingService.service_id === service.service_id && existingService.type === service.type,
-		);
-		if (existingServiceIndex === -1) {
-			this.services_internal.push(service);
-		} else {
-			this.services_internal[existingServiceIndex] = service;
+		const usedPorts = listUsedServicePorts(this.services_internal, service_id);
+		const service: WebService = {
+			service_id,
+			image,
+			domain,
+			internal_port,
+			type: "web",
+			exposed_port: allocatePort(usedPorts, WEB_EXPOSED_PORT_START, existingService?.exposed_port),
+		};
+
+		this.setService(service);
+		return service;
+	}
+
+	setPatroniService(service_id: string, sync_mode: "async" | "sync"): PatroniService {
+		const existingService = this.getService(service_id);
+		if (existingService && existingService.type !== "patroni") throw new ServiceIdConflictError(service_id);
+
+		const usedPorts = listUsedServicePorts(this.services_internal, service_id);
+		const service: PatroniService = {
+			service_id,
+			sync_mode,
+			type: "patroni",
+			postgres_port: allocatePort(usedPorts, PATRONI_PORT_START, existingService?.postgres_port),
+			read_write_port: allocatePort(usedPorts, PATRONI_PORT_START, existingService?.read_write_port),
+			read_only_port: allocatePort(usedPorts, PATRONI_PORT_START, existingService?.read_only_port),
+			patroni_rest_port: allocatePort(usedPorts, PATRONI_REST_PORT_START, existingService?.patroni_rest_port),
+		};
+
+		this.setService(service);
+		return service;
+	}
+
+	private setService(service: ClusterService): void {
+		parseOrThrow(ClusterServiceSchema, service, new ClusterConfigError());
+		const existingService = this.services_internal[service.service_id];
+		if (existingService && existingService.type !== service.type) {
+			throw new ServiceIdConflictError(service.service_id);
 		}
 
+		this.services_internal[service.service_id] = service;
 		this.config.updated_at = new Date().toISOString();
 		saveClusterConfigToDisk(this);
+	}
+
+	getService(serviceId: string): ClusterService | null {
+		return this.services_internal[serviceId] ?? null;
 	}
 
 	getCopy(): ClusterInfo {
@@ -191,11 +269,11 @@ export class Cluster {
 	}
 
 	getNodesCopy(): NodeInfo[] {
-		return this.nodes_internal.map((node) => node.getCopy());
+		return this.nodes.map((node) => node.getCopy());
 	}
 
-	getServicesCopy(): ClusterService[] {
-		return this.services_internal.map((service) => ({ ...service }));
+	getServicesCopy(): ClusterServices {
+		return Object.fromEntries(Object.entries(this.services_internal).map(([serviceId, service]) => [serviceId, { ...service }]));
 	}
 }
 
@@ -205,22 +283,22 @@ function syncWireguardPeersFromClusterConfig(): void {
 	setupWireguardInterface();
 
 	try {
-		const localHostname = os.hostname();
-		const other_nodes = clusterConfigSingleton?.nodes
-			.filter((node) => node.hostname !== localHostname)
+		const localNode = clusterConfigSingleton?.getLocalNode();
+		const otherNodes = clusterConfigSingleton?.nodes
+			.filter((node) => node.id !== localNode?.id)
 			.map((node) => ({
 				publicKey: node.wireguardPublicKey,
-				endpoint: `${node.publicIp}:${CONFIG_WIREGUARD_LISTEN_PORT}`,
+				endpoint: `${node.publicIp}:${WIREGUARD_LISTEN_PORT}`,
 				allowedIp: `${node.wireguardIp}/32`,
 			}));
 
-		syncWireguardPeers(other_nodes ?? []);
+		syncWireguardPeers(otherNodes ?? []);
 	} catch (error) {
 		console.error(`Failed to update WireGuard peers from cluster config: ${error instanceof Error ? error.message : "Unknown error."}`);
 	}
 }
 
-export function getConfigPayload(): { cluster: ClusterInfo; nodes: NodeInfo[]; services: ClusterService[] } {
+export function getConfigPayload(): { cluster: ClusterInfo; nodes: NodeInfo[]; services: ClusterServices } {
 	if (!clusterConfigSingleton) {
 		throw new NoClusterConfigError();
 	}
@@ -233,10 +311,15 @@ export function getConfigPayload(): { cluster: ClusterInfo; nodes: NodeInfo[]; s
 }
 
 export function getClusterConfigHash(): string {
-	const payload = getConfigPayload();
-	payload.nodes.sort((left, right) => left.node_id - right.node_id);
-	payload.services.sort((left, right) => left.service_id.localeCompare(right.service_id));
-	return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+	const clusterConfig = getClusterConfig();
+
+	const sortedPayload = {
+		cluster: clusterConfig.getCopy(),
+		nodes: clusterConfig.getNodesCopy(),
+		services: Object.fromEntries(clusterConfig.getSortedServices()),
+	};
+
+	return crypto.createHash("sha256").update(JSON.stringify(sortedPayload)).digest("hex");
 }
 
 export function saveClusterConfigToDisk(config: Cluster): void {
@@ -244,16 +327,17 @@ export function saveClusterConfigToDisk(config: Cluster): void {
 	const nodesCopy = config.getNodesCopy();
 	const servicesCopy = config.getServicesCopy();
 
-	fs.mkdirSync(path.dirname(CONFIG_PATH_CLUSTER), { recursive: true });
+	fs.mkdirSync(path.dirname(CONFIG_PATH_CONFIG), { recursive: true });
 	fs.mkdirSync(path.dirname(CONFIG_PATH_NODES), { recursive: true });
 	fs.mkdirSync(path.dirname(CONFIG_PATH_SERVICES), { recursive: true });
 
-	fs.writeFileSync(CONFIG_PATH_CLUSTER, JSON.stringify(configCopy, null, 2));
+	fs.writeFileSync(CONFIG_PATH_CONFIG, JSON.stringify(configCopy, null, 2));
 	fs.writeFileSync(CONFIG_PATH_NODES, JSON.stringify(nodesCopy, null, 2));
 	fs.writeFileSync(CONFIG_PATH_SERVICES, JSON.stringify(servicesCopy, null, 2));
+	setupServices(config);
 }
 
-export function applyClusterConfig(clusterData: unknown, nodesData: unknown, servicesData: unknown = []): Cluster {
+export function applyClusterConfig(clusterData: unknown, nodesData: unknown, servicesData: unknown = {}): Cluster {
 	const config = Cluster.fromJSON(clusterData, nodesData, servicesData);
 	setClusterConfig(config);
 	saveClusterConfigToDisk(config);
@@ -273,7 +357,7 @@ export async function syncConfigToCluster(clusterConfig: Cluster, ignoredNodeIds
 	await Promise.all(
 		nodesToUpdate.map(async (node) => {
 			try {
-				const updateResponse = await fetch(`http://${node.wireguardIp}:8080/set_config`, {
+				const updateResponse = await fetch(`http://${node.wireguardIp}:${HTTP_DAEMON_PORT}/set_config`, {
 					method: "POST",
 					headers: {
 						"Content-Type": "application/json",
@@ -321,7 +405,7 @@ async function syncClusterConfigFromCoordinatorOnStartup(): Promise<void> {
 		await delay(1000);
 
 		try {
-			const startupPingResponse = await fetch(`http://${clusterConfig.coordinatorNode.wireguardIp}:8080/startup_ping`, {
+			const startupPingResponse = await fetch(`http://${clusterConfig.coordinatorNode.wireguardIp}:${HTTP_DAEMON_PORT}/startup_ping`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -375,16 +459,72 @@ async function syncClusterConfigFromCoordinatorOnStartup(): Promise<void> {
 	}
 }
 
+function listUsedServicePorts(services: ClusterServices, excludedId?: string): Set<number> {
+	const usedPorts = new Set<number>();
+
+	for (const [id, service] of Object.entries(services)) {
+		if (id === excludedId) continue;
+
+		if (service.type === "web") {
+			if (service.exposed_port !== undefined) {
+				usedPorts.add(service.exposed_port);
+			}
+		} else {
+			if (service.postgres_port !== undefined) usedPorts.add(service.postgres_port);
+			if (service.read_write_port !== undefined) usedPorts.add(service.read_write_port);
+			if (service.read_only_port !== undefined) usedPorts.add(service.read_only_port);
+			if (service.patroni_rest_port !== undefined) usedPorts.add(service.patroni_rest_port);
+		}
+	}
+
+	return usedPorts;
+}
+
+function allocatePort(usedPorts: Set<number>, startPort: number, requestedPort: number | undefined): number {
+	if (requestedPort && !usedPorts.has(requestedPort)) {
+		usedPorts.add(requestedPort);
+		return requestedPort;
+	}
+
+	for (let port = startPort; port <= 65535; port++) {
+		if (usedPorts.has(port)) continue;
+		usedPorts.add(port);
+		return port;
+	}
+
+	throw new ServicePortAllocationError();
+}
+
+function validateClusterConfig(config: ClusterInfo, nodes: ClusterNode[]): void {
+	const validCoordinatorNodeExists = nodes.some((node) => node.id === config.coordinator_node_id) !== undefined;
+	const leaderIsValidIfExists = config.leader_node_id !== undefined && nodes.some((node) => node.id === config.leader_node_id);
+
+	if (!validCoordinatorNodeExists || !leaderIsValidIfExists) throw new ClusterConfigError();
+
+	const hostnames = new Set<string>();
+	for (const node of nodes) {
+		if (hostnames.has(node.hostname)) {
+			throw new ClusterConfigError();
+		}
+
+		hostnames.add(node.hostname);
+	}
+}
+
+function sortClusterNodes(nodes: ClusterNode[]): ClusterNode[] {
+	return [...nodes].sort((left, right) => left.id - right.id);
+}
+
 // Load cluster config from disk if there is one.
-if (fs.existsSync(CONFIG_PATH_CLUSTER)) {
-	const clusterConfigJson = JSON.parse(fs.readFileSync(CONFIG_PATH_CLUSTER, "utf8"));
+if (fs.existsSync(CONFIG_PATH_CONFIG)) {
+	const clusterConfigJson = JSON.parse(fs.readFileSync(CONFIG_PATH_CONFIG, "utf8"));
 
 	let clusterNodesJson = [];
 	if (fs.existsSync(CONFIG_PATH_NODES)) {
 		clusterNodesJson = JSON.parse(fs.readFileSync(CONFIG_PATH_NODES, "utf8"));
 	}
 
-	let clusterServicesJson = [];
+	let clusterServicesJson = {};
 	if (fs.existsSync(CONFIG_PATH_SERVICES)) {
 		clusterServicesJson = JSON.parse(fs.readFileSync(CONFIG_PATH_SERVICES, "utf8"));
 	}
@@ -392,6 +532,7 @@ if (fs.existsSync(CONFIG_PATH_CLUSTER)) {
 	const config = Cluster.fromJSON(clusterConfigJson, clusterNodesJson, clusterServicesJson);
 	clusterConfigSingleton = config;
 	syncWireguardPeersFromClusterConfig();
+	setupServices(config);
 }
 
 syncClusterConfigFromCoordinatorOnStartup();

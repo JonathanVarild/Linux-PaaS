@@ -4,12 +4,13 @@ import { OutputStream } from "../app/daemon";
 import { z } from "zod";
 import { Ipv4Schema } from "../models/networking";
 import { parseOrThrowWithMessage } from "../utils/zod";
-import { getPublicIP } from "../utils/ip";
+import { getPublicIP } from "../utils/networking";
 
 const CreateOptionsSchema = z.object({
 	nodeIp: Ipv4Schema.optional(),
 });
 
+// Command handler for creating a new cluster config.
 export async function createServerHandler(options: unknown, stream: OutputStream): Promise<void> {
 	const parsedOptions = parseOrThrowWithMessage(CreateOptionsSchema, options);
 	const publicIp = parsedOptions.nodeIp ?? (await getPublicIP());
@@ -18,6 +19,7 @@ export async function createServerHandler(options: unknown, stream: OutputStream
 		throw new Error("Cluster configuration already exists.");
 	}
 
+	// Create the cluster config, enable it, and save it to the disk.
 	const config = Cluster.create(os.hostname(), publicIp);
 	setClusterConfig(config);
 	saveClusterConfigToDisk(config);

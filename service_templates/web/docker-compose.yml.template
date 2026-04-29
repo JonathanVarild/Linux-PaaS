@@ -1,0 +1,6 @@
+services:
+  app:
+    image: {IMAGE}
+    restart: unless-stopped
+    ports:
+      - "{EXPOSED_PORT}:{INTERNAL_PORT}"

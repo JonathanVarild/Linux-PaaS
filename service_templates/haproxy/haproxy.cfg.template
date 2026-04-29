@@ -1,0 +1,30 @@
+global
+    log stdout format raw local0
+    user haproxy
+    group haproxy
+    chroot /var/lib/haproxy
+
+defaults
+    log global
+    timeout connect 5s
+    timeout client 50s
+    timeout server 50s
+
+frontend http_front
+    mode http
+    bind *:80
+
+{WEB_HOST_RULES}
+    default_backend not_found
+
+{SERVICE_PROXY_SECTIONS}
+frontend stats
+    mode http
+    bind *:8404
+    stats enable
+    stats uri /
+    stats refresh 5s
+
+backend not_found
+    mode http
+    http-request return status 404 content-type text/plain lf-string "Unknown host\n"

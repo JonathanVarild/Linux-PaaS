@@ -1,0 +1,5 @@
+backend web_{HAPROXY_NAME}
+    mode http
+    balance roundrobin
+{SERVER_LINES}
+    http-response set-header X-Backend-Server %[srv_name]

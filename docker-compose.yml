@@ -4,18 +4,25 @@ x-linux-paas-base: &linux-paas-base
     dockerfile: Dockerfile
   image: linux-paas:dev
   init: true
-  cap_add:
-    - NET_ADMIN
+  privileged: true
   working_dir: /app
-  volumes:
-    - .:/app
-    - node_modules:/app/node_modules
   restart: unless-stopped
 
 services:
   worker-1:
     <<: *linux-paas-base
     hostname: worker-1
+    ports:
+      - "18000:80"
+      - "18404:8404"
+      - "5432-5451:5432-5451"
+      - "8008-8015:8008-8015"
+      - "15000-15019:15000-15019"
+    volumes:
+      - .:/app
+      - worker1_node_modules:/app/node_modules
+      - worker1_docker_data:/var/lib/docker
+      - worker1_containerd_data:/var/lib/containerd
     networks:
       cluster_net:
         ipv4_address: 172.31.0.10
@@ -23,6 +30,11 @@ services:
   worker-2:
     <<: *linux-paas-base
     hostname: worker-2
+    volumes:
+      - .:/app
+      - worker2_node_modules:/app/node_modules
+      - worker2_docker_data:/var/lib/docker
+      - worker2_containerd_data:/var/lib/containerd
     networks:
       cluster_net:
         ipv4_address: 172.31.0.11
@@ -30,12 +42,25 @@ services:
   worker-3:
     <<: *linux-paas-base
     hostname: worker-3
+    volumes:
+      - .:/app
+      - worker3_node_modules:/app/node_modules
+      - worker3_docker_data:/var/lib/docker
+      - worker3_containerd_data:/var/lib/containerd
     networks:
       cluster_net:
         ipv4_address: 172.31.0.12
 
 volumes:
-  node_modules:
+  worker1_node_modules:
+  worker2_node_modules:
+  worker3_node_modules:
+  worker1_docker_data:
+  worker1_containerd_data:
+  worker2_docker_data:
+  worker2_containerd_data:
+  worker3_docker_data:
+  worker3_containerd_data:
 
 networks:
   cluster_net:
