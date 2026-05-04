@@ -31,6 +31,13 @@ expressApp.use((req: express.Request, res: express.Response, next: express.NextF
 });
 
 /**
+ * Endpoint for health checks to verify that the node is responsive.
+ */
+expressApp.get("/ping", (_req: express.Request, res: express.Response) => {
+	res.status(204).send();
+});
+
+/**
  * Endpoint for coordinator where nodes send a startup ping to check if their config is up to date and to retrieve the latest config if not.
  */
 expressApp.post("/startup_ping", (req: express.Request, res: express.Response) => {

@@ -46,10 +46,14 @@ import {
 
 export class ClusterNode {
 	private readonly config: NodeInfo;
+	private nodeStatus: boolean;
+	private failedPings: number;
 
 	constructor(config: NodeInfo) {
 		parseOrThrow(NodeInfoSchema, config, new ClusterConfigError());
 		this.config = config;
+		this.nodeStatus = config.hostname === os.hostname();
+		this.failedPings = 0;
 	}
 
 	static create(node_id: number, hostname: string, publicIp: string, wireguardPublicKey: string): ClusterNode {
@@ -82,8 +86,44 @@ export class ClusterNode {
 		return `${WIREGUARD_NETWORK_PREFIX}.${this.config.node_id}`;
 	}
 
+	get status(): boolean {
+		return this.nodeStatus || this.config.hostname === os.hostname();
+	}
+
+	get failedPingCount(): number {
+		return this.failedPings;
+	}
+
 	getCopy(): NodeInfo {
 		return { ...this.config };
+	}
+
+	async ping(): Promise<void> {
+		if (!hasClusterConfig() || this.config.hostname === os.hostname()) return;
+
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), 5000);
+
+		try {
+			const response = await fetch(`http://${this.wireguardIp}:${HTTP_DAEMON_PORT}/ping`, {
+				headers: {
+					"x-access-key": getClusterConfig().accessKey,
+				},
+				signal: controller.signal,
+			});
+
+			if (response.ok) {
+				this.nodeStatus = true;
+				this.failedPings = 0;
+				return;
+			}
+		} catch {
+		} finally {
+			clearTimeout(timeout);
+		}
+
+		this.nodeStatus = false;
+		this.failedPings += 1;
 	}
 }
 
@@ -128,6 +168,19 @@ export class Cluster {
 
 		const nodes = nodesInfo.map((nodeInfo) => new ClusterNode(nodeInfo));
 		return new Cluster(clusterInfo, nodes, servicesInfo);
+	}
+
+	static async pingNodes(): Promise<void> {
+		if (!hasClusterConfig()) return;
+
+		const clusterConfig = getClusterConfig();
+
+		await Promise.all(
+			clusterConfig.nodes.map(async (node) => {
+				if (node.hostname === os.hostname()) return;
+				await node.ping();
+			}),
+		);
 	}
 
 	get clusterId(): string {
@@ -536,3 +589,4 @@ if (fs.existsSync(CONFIG_PATH_CONFIG)) {
 }
 
 syncClusterConfigFromCoordinatorOnStartup();
+setInterval(Cluster.pingNodes, 1000);

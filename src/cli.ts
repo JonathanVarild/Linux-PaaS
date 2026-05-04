@@ -37,6 +37,13 @@ program
 		await sendIpcCommand("config", {});
 	});
 
+program
+	.command("status")
+	.description("Displays the current cluster node statuses.")
+	.action(async () => {
+		await sendIpcCommand("status", {});
+	});
+
 const deployCommand = program.command("deploy").description("Adds or updates desired service deployments in cluster config.");
 
 deployCommand

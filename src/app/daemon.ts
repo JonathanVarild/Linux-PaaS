@@ -5,6 +5,7 @@ import { configServerHandler } from "../cli/config";
 import { createServerHandler } from "../cli/create";
 import { deployServiceHandler } from "../cli/deploy";
 import { joinServerHandler } from "../cli/join";
+import { statusServerHandler } from "../cli/status";
 
 import type { Socket } from "net";
 import { DAEMON_ID, DAEMON_SOCKET_PATH } from "../utils/ipc";
@@ -26,6 +27,7 @@ const commandHandlers: Record<string, CommandHandler> = {
 	create: createServerHandler,
 	deploy: deployServiceHandler,
 	join: joinServerHandler,
+	status: statusServerHandler,
 };
 
 // Function to remove the socket file if it exists.
