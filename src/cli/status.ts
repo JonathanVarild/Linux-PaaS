@@ -8,7 +8,7 @@ export async function statusServerHandler(_args: unknown, stream: OutputStream):
 
 	stream.sendOutput(
 		getClusterConfig()
-			.nodes.map((node) => `${node.hostname} (${node.wireguardIp}): ${node.status ? "up" : `down (${node.failedPingCount})`}`)
+			.nodes.map((node) => `${node.hostname} (${node.publicIp} -> ${node.wireguardIp}): ${node.status ? "up" : `down (${node.failedPingCount})`}`)
 			.join("\n"),
 	);
 }
