@@ -46,10 +46,3 @@ export class CouldNotFindNodeError extends Error {
 		this.name = "CouldNotFindNodeError";
 	}
 }
-
-export class CouldNotAddEtcdMemberError extends Error {
-	constructor() {
-		super(`Failed to add etcd member.`);
-		this.name = "CouldNotAddEtcdMemberError";
-	}
-}

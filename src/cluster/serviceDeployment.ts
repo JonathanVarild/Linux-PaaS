@@ -17,10 +17,9 @@ import { generateEtcdFiles, getEtcdPeerUrl } from "./etcdConfigFiles";
 import { generateHaproxyFiles } from "./haproxyConfigFiles";
 import { generatePatroniServiceFiles } from "./patroniServiceConfigFiles";
 import { generateWebServiceFiles } from "./webServiceConfigFiles";
-import type { Cluster, ClusterNode } from "./config";
+import { getClusterConfig, hasClusterConfig, type Cluster, type ClusterNode } from "./config";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { CouldNotAddEtcdMemberError } from "../errors/configErrors";
 import { delay } from "../utils/misc";
 import crypto from "crypto";
 
@@ -206,6 +205,8 @@ export async function signalService(directoryPath: string, serviceName: string, 
  * @param nodes The list of nodes in the cluster.
  */
 export async function addMissingEtcdMembers(nodes: ClusterNode[]): Promise<void> {
+	if (nodes.length === 0) return;
+
 	try {
 		// Make a etcd health check to ensure that etcd is ready to accept commands.
 		await waitForEtcd();
@@ -223,7 +224,7 @@ export async function addMissingEtcdMembers(nodes: ClusterNode[]): Promise<void>
 			await runEtcdctl(["member", "add", `node-${node.id}`, `--peer-urls=${peerUrl}`]);
 		}
 	} catch (error) {
-		throw new CouldNotAddEtcdMemberError();
+		console.warn(`Failed to add missing etcd members: ${error instanceof Error ? error.message : "Unknown error."}`);
 	}
 }
 
@@ -304,3 +305,9 @@ async function runComposeCommand(directoryPath: string, args: string[]): Promise
 	});
 	return stdout;
 }
+
+// Add missing etcd members if we failed at some point.
+setInterval(() => {
+	if (!hasClusterConfig()) return;
+	addMissingEtcdMembers(getClusterConfig().nodes);
+}, 60 * 1000);
