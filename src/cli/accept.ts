@@ -7,7 +7,7 @@ import path from "path";
 import { execFileSync } from "child_process";
 import { getClusterConfig, hasClusterConfig, syncConfigToCluster } from "../cluster/config";
 import { NodeJoinRequestSchema } from "../models/networking";
-import { ClusterConfigError } from "../errors/configErrors";
+import { ClusterConfigError, NodeAlreadyExistsError } from "../errors/configErrors";
 import { OutputStream } from "../app/daemon";
 import { JOIN_SERVER_PORT } from "../constants";
 
@@ -78,6 +78,8 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 			console.error("Error processing join request:", error);
 			if (error instanceof ClusterConfigError) {
 				return res.status(409).send(error.message);
+			} else if (error instanceof NodeAlreadyExistsError) {
+				return res.status(409).send("A node with the same hostname or IP already exists in the cluster. Remove existing node from configuration before trying again.");
 			}
 
 			throw error;
