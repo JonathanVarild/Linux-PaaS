@@ -48,7 +48,6 @@ async function checkClusterHealth(): Promise<void> {
 	// Loop through all services, check health, and heal them if needed.
 	for (const [serviceId, service] of clusterConfig.getSortedServices()) {
 		const directoryPath = path.join(CONFIG_PATH_SERVICES_DIR, serviceId);
-		if (!fs.existsSync(path.join(directoryPath, "docker-compose.yml"))) continue;
 
 		// If we find any issue, try to repair the deployment.
 		issue = await checkService(directoryPath, service.type);
@@ -81,6 +80,7 @@ async function repairDeployment(serviceId: string, directoryPath: string, issue:
  */
 async function checkService(directoryPath: string, composeServiceName: string): Promise<Issue | null> {
 	try {
+		if (!fs.existsSync(path.join(directoryPath, "docker-compose.yml"))) return null;
 		if (getComposeState(directoryPath) !== null) return null;
 
 		// Get the container IDs for the service compose file.
