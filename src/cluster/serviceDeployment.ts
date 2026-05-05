@@ -25,6 +25,15 @@ import crypto from "crypto";
 
 const execFileAsync = promisify(execFile);
 let setupServicesSyncQueue: Promise<void> = Promise.resolve();
+type ComposeCommand = {
+	promise: Promise<unknown>;
+	args: string[];
+};
+type ComposeCommandState = {
+	mainPromise: Promise<unknown>;
+	commands: ComposeCommand[];
+};
+const composeCommandStatesByDir = new Map<string, ComposeCommandState>();
 
 /**
  * Function used to set up all services running on a node.
@@ -293,17 +302,76 @@ export async function runComposeDown(directoryPath: string): Promise<void> {
 }
 
 /**
+ * Function to get the current compose command that is running for a specific directory.
+ * @param directoryPath
+ * @returns
+ */
+export function getComposeState(directoryPath: string): string | null {
+	const normalizedDirectoryPath = path.resolve(directoryPath);
+	const state = composeCommandStatesByDir.get(normalizedDirectoryPath);
+	return state?.commands[0]?.args[0] ?? null;
+}
+
+/**
  * Helper function used to run a docker-compose command on a specific directory and return the stdout.
  * @param directoryPath The path to the service directory where the docker-compose.yml is.
  * @param args The arguments to pass to docker-compose.
+ * @param runInstantly If true, skips the per-directory compose queue.
  * @returns A promise resolving to the stdout from the command execution.
  */
-async function runComposeCommand(directoryPath: string, args: string[]): Promise<string> {
-	const { stdout } = await execFileAsync("docker-compose", args, {
-		cwd: directoryPath,
-		encoding: "utf8",
+export async function runComposeCommand(directoryPath: string, args: string[], runInstantly = false): Promise<string> {
+	// Normalize the directory path so we don't get multiple entries for the same dir.
+	const normalizedDirectoryPath = path.resolve(directoryPath);
+
+	// Prepare the command function.
+	const runCommand = async () => {
+		const { stdout } = await execFileAsync("docker-compose", args, {
+			cwd: normalizedDirectoryPath,
+			encoding: "utf8",
+		});
+		return stdout;
+	};
+
+	// Instant commands skip queueing and command-state tracking.
+	if (runInstantly) {
+		return runCommand();
+	}
+
+	// Get or create the command state for this dir.
+	const commandState = composeCommandStatesByDir.get(normalizedDirectoryPath) ?? {
+		mainPromise: Promise.resolve(),
+		commands: [],
+	};
+
+	// Chain the new command to the previous promise to ensure commands run sequentially for each directory.
+	const commandPromise = commandState.mainPromise.catch(() => undefined).then(runCommand);
+
+	// Set the new main promise and add the command to the state.
+	commandState.mainPromise = commandPromise;
+	commandState.commands.push({
+		promise: commandPromise,
+		args: [...args],
 	});
-	return stdout;
+	composeCommandStatesByDir.set(normalizedDirectoryPath, commandState);
+
+	try {
+		// Run the command and return the output.
+		return await commandPromise;
+	} finally {
+		// Get the current command state.
+		const currentCommandState = composeCommandStatesByDir.get(normalizedDirectoryPath);
+
+		// Check if its still valid.
+		if (currentCommandState) {
+			// Filter out the completed command.
+			currentCommandState.commands = currentCommandState.commands.filter((command) => command.promise !== commandPromise);
+
+			// Remove the state for the dir if there are no more commands to run.
+			if (currentCommandState.commands.length === 0) {
+				composeCommandStatesByDir.delete(normalizedDirectoryPath);
+			}
+		}
+	}
 }
 
 // Add missing etcd members if we failed at some point.

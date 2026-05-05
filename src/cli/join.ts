@@ -72,10 +72,10 @@ export async function joinServerHandler(args: unknown, stream: OutputStream): Pr
 		const joinResponseValue = parseOrThrowWithMessage(JoinResponseSchema, JSON.parse(responseBody));
 		const joinedClusterConfig = applyClusterConfig(joinResponseValue.cluster, joinResponseValue.nodes, joinResponseValue.services);
 
-		// Request a new leader election now that there is a new node available.
-		await requestLeaderElection();
+		// Request a new leader election in the background now that there is a new node available.
+		requestLeaderElection().catch(() => undefined);
 
-		stream.sendOutput(`Successfully joined cluster as node #${joinedClusterConfig.getLocalNode().id}.\n`);
+		stream.sendOutput(`Successfully joined cluster as node #${joinedClusterConfig.getLocalNode().id}. Managed services have been scheduled.\n`);
 		return responseBody;
 	} catch (error) {
 		throw new Error(`Failed to join cluster network: ${error instanceof Error ? error.message : "Unknown error"}`);

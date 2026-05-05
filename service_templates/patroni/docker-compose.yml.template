@@ -8,3 +8,8 @@ services:
       - ./patroni.yml:/home/postgres/patroni.yml:ro
       - ./data:/home/postgres/pgdata
     command: patroni /home/postgres/patroni.yml
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "{POSTGRES_PORT}", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

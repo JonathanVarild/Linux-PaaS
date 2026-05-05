@@ -1,5 +1,5 @@
 services:
-  app:
+  web:
     image: {IMAGE}
     restart: unless-stopped
     ports:

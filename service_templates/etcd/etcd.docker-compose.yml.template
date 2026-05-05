@@ -7,6 +7,12 @@ services:
       - .env
     environment:
       ETCD_DATA_DIR: /etcd-data
+      ETCDCTL_API: "3"
     volumes:
       - ./etcd-data:/etcd-data
     command: /usr/local/bin/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

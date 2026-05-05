@@ -6,7 +6,9 @@ import type { Cluster, ClusterNode } from "./config";
 
 export function generatePatroniServiceFiles(cluster: Cluster, service: PatroniService): Record<string, string> {
 	return {
-		"docker-compose.yml": generateTemplateFromFile("patroni/docker-compose.yml.template"),
+		"docker-compose.yml": generateTemplateFromFile("patroni/docker-compose.yml.template", {
+			POSTGRES_PORT: String(service.postgres_port),
+		}),
 		"patroni.yml": generatePatroniConfig(cluster, service),
 	};
 }
