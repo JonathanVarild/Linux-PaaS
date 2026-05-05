@@ -29,6 +29,7 @@ import z from "zod";
 import fetch from "node-fetch";
 import { delay } from "../utils/misc";
 import { StartupPingResponseSchema } from "../models/networking";
+import { requestLeaderElection, attemptLeaderElection } from "./leaderElection";
 import { setupServices } from "./serviceDeployment";
 import {
 	CONFIG_PATH_CONFIG,
@@ -37,6 +38,9 @@ import {
 	CONFIG_PING_RETRY_DELAY_MS,
 	CONFIG_VERSION,
 	HTTP_DAEMON_PORT,
+	LEADER_ELECTION_INTERVAL_MS,
+	LEADER_ELECTION_MAX_RETRIES,
+	NODE_PING_INTERVAL_MS,
 	PATRONI_PORT_START,
 	PATRONI_REST_PORT_START,
 	WEB_EXPOSED_PORT_START,
@@ -174,6 +178,7 @@ export class Cluster {
 		if (!hasClusterConfig()) return;
 
 		const clusterConfig = getClusterConfig();
+		const leaderNode = clusterConfig.leaderNode;
 
 		await Promise.all(
 			clusterConfig.nodes.map(async (node) => {
@@ -181,6 +186,15 @@ export class Cluster {
 				await node.ping();
 			}),
 		);
+
+		// Return if we are the leader.
+		if (leaderNode.hostname === os.hostname()) return;
+
+		// Return if leader is online, or offline but haven't reached retry threshold.
+		if (leaderNode.status || leaderNode.failedPingCount === 0 || leaderNode.failedPingCount % LEADER_ELECTION_MAX_RETRIES !== 0) return;
+
+		// Request a leader election.
+		await requestLeaderElection();
 	}
 
 	get clusterId(): string {
@@ -203,8 +217,8 @@ export class Cluster {
 		return this.nodes_internal.find((node) => node.id === this.config.coordinator_node_id)!;
 	}
 
-	get leaderNode(): ClusterNode | null {
-		return this.config.leader_node_id ? this.nodes_internal.find((node) => node.id === this.config.leader_node_id) || null : null;
+	get leaderNode(): ClusterNode {
+		return this.nodes_internal.find((node) => node.id === this.config.leader_node_id)!;
 	}
 
 	get nodes(): ClusterNode[] {
@@ -227,6 +241,16 @@ export class Cluster {
 
 	isCoordinatorNode(node: ClusterNode): boolean {
 		return this.coordinatorNode.id === node.id;
+	}
+
+	setLeaderNode(nodeId: number): boolean {
+		if (!this.getNodeById(nodeId)) throw new CouldNotFindNodeError();
+		if (this.config.leader_node_id === nodeId) return false;
+
+		this.config.leader_node_id = nodeId;
+		this.config.updated_at = new Date().toISOString();
+		saveClusterConfigToDisk(this);
+		return true;
 	}
 
 	getSortedServices(): Array<[string, ClusterService]> {
@@ -549,10 +573,10 @@ function allocatePort(usedPorts: Set<number>, startPort: number, requestedPort: 
 }
 
 function validateClusterConfig(config: ClusterInfo, nodes: ClusterNode[]): void {
-	const validCoordinatorNodeExists = nodes.some((node) => node.id === config.coordinator_node_id) !== undefined;
-	const leaderIsValidIfExists = config.leader_node_id !== undefined && nodes.some((node) => node.id === config.leader_node_id);
+	const validCoordinatorNodeExists = nodes.some((node) => node.id === config.coordinator_node_id);
+	const validLeaderNodeExists = nodes.some((node) => node.id === config.leader_node_id);
 
-	if (!validCoordinatorNodeExists || !leaderIsValidIfExists) throw new ClusterConfigError();
+	if (!validCoordinatorNodeExists || !validLeaderNodeExists) throw new ClusterConfigError();
 
 	const hostnames = new Set<string>();
 	for (const node of nodes) {
@@ -589,4 +613,8 @@ if (fs.existsSync(CONFIG_PATH_CONFIG)) {
 }
 
 syncClusterConfigFromCoordinatorOnStartup();
-setInterval(Cluster.pingNodes, 1000);
+setInterval(Cluster.pingNodes, NODE_PING_INTERVAL_MS);
+setInterval(() => {
+	if (!hasClusterConfig()) return;
+	attemptLeaderElection();
+}, LEADER_ELECTION_INTERVAL_MS);

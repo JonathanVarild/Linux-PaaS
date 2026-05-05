@@ -5,6 +5,7 @@ import { configServerHandler } from "../cli/config";
 import { createServerHandler } from "../cli/create";
 import { deployServiceHandler } from "../cli/deploy";
 import { joinServerHandler } from "../cli/join";
+import { reelectLeaderHandler } from "../cli/reelect";
 import { statusServerHandler } from "../cli/status";
 
 import type { Socket } from "net";
@@ -27,6 +28,7 @@ const commandHandlers: Record<string, CommandHandler> = {
 	create: createServerHandler,
 	deploy: deployServiceHandler,
 	join: joinServerHandler,
+	reelect: reelectLeaderHandler,
 	status: statusServerHandler,
 };
 

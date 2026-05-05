@@ -1,7 +1,8 @@
 import express from "express";
 import os from "os";
+import { attemptLeaderElection } from "../cluster/leaderElection";
 import { applyClusterConfig, getClusterConfig, getClusterConfigHash, getConfigPayload, hasClusterConfig } from "../cluster/config";
-import { ClusterConfigRequestSchema, StartupPingRequestSchema } from "../models/networking";
+import { ClusterConfigRequestSchema, LeaderElectionRequestSchema, StartupPingRequestSchema } from "../models/networking";
 import { HTTP_DAEMON_PORT } from "../constants";
 
 export const expressApp = express();
@@ -80,6 +81,49 @@ expressApp.post("/set_config", (req: express.Request, res: express.Response) => 
 	} catch {
 		res.status(400).send("Config update payload is invalid.");
 	}
+});
+
+/**
+ * Endpoint for nodes to report their status to the coordinator during leader election.
+ * Returns the nodes' current 5 minute load average and which nodes it considers offline.
+ */
+expressApp.get("/get_node_status", (_req: express.Request, res: express.Response) => {
+	res.json({
+		load_value: os.loadavg()[1] ?? 0,
+		offline_node_ids: getClusterConfig()
+			.nodes.filter((node) => !node.status)
+			.map((node) => node.id),
+	});
+});
+
+/**
+ * Endpoint for coordinator to receive leader election requests.
+ */
+expressApp.post("/request_leader_election", (req: express.Request, res: express.Response) => {
+	// Ensure that the leader election request is valid.
+	const payloadResult = LeaderElectionRequestSchema.safeParse(req.body);
+	if (!payloadResult.success) {
+		res.status(400).send("Leader election payload is invalid.");
+		return;
+	}
+
+	const clusterConfig = getClusterConfig();
+
+	// Ensure that we are the coordinator.
+	if (clusterConfig.coordinatorNode.hostname !== os.hostname()) {
+		res.status(409).send("Only the coordinator node can process leader election requests.");
+		return;
+	}
+
+	// Ensure that the requesting node's config is up to date.
+	if (payloadResult.data.config_hash !== getClusterConfigHash()) {
+		res.status(409).send("Reporting node config is out of date.");
+		return;
+	}
+
+	// Attempt a leader election.
+	attemptLeaderElection(true);
+	res.status(202).send();
 });
 
 expressApp.listen(HTTP_DAEMON_PORT, () => {

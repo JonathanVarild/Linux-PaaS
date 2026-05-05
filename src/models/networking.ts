@@ -24,3 +24,12 @@ export const StartupPingResponseSchema = z.object({
 	nodes: z.unknown().optional(),
 	services: z.unknown().optional(),
 });
+
+export const NodeStatusResponseSchema = z.object({
+	load_value: z.number().min(0),
+	offline_node_ids: z.array(z.number().int().min(1).max(255)),
+});
+
+export const LeaderElectionRequestSchema = z.object({
+	config_hash: z.string().trim().length(64),
+});

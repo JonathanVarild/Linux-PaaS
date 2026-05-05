@@ -22,7 +22,7 @@ export const ClusterInfoSchema = z.object({
 	created_at: z.string(),
 	updated_at: z.string(),
 	coordinator_node_id: z.number().int().min(1).max(255),
-	leader_node_id: z.number().int().min(1).max(255).optional(),
+	leader_node_id: z.number().int().min(1).max(255),
 });
 export type ClusterInfo = z.infer<typeof ClusterInfoSchema>;
 

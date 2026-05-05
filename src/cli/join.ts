@@ -1,6 +1,7 @@
 import https from "https";
 import os from "os";
 import fetch from "node-fetch";
+import { requestLeaderElection } from "../cluster/leaderElection";
 import { applyClusterConfig, hasClusterConfig } from "../cluster/config";
 import { type NodeJoinRequest } from "../models/networking";
 import { z } from "zod";
@@ -70,6 +71,9 @@ export async function joinServerHandler(args: unknown, stream: OutputStream): Pr
 		// Parse and validate the response and then apply config to local node.
 		const joinResponseValue = parseOrThrowWithMessage(JoinResponseSchema, JSON.parse(responseBody));
 		const joinedClusterConfig = applyClusterConfig(joinResponseValue.cluster, joinResponseValue.nodes, joinResponseValue.services);
+
+		// Request a new leader election now that there is a new node available.
+		await requestLeaderElection();
 
 		stream.sendOutput(`Successfully joined cluster as node #${joinedClusterConfig.getLocalNode().id}.\n`);
 		return responseBody;

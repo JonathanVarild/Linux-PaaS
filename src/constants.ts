@@ -19,6 +19,11 @@ export const SERVICE_TEMPLATES_PATH = path.resolve(process.cwd(), "service_templ
 
 export const HTTP_DAEMON_PORT = 8080;
 export const JOIN_SERVER_PORT = 8443;
+export const NODE_PING_INTERVAL_MS = 1000;
+export const LEADER_ELECTION_INTERVAL_MS = 5 * 60 * 1000;
+export const LEADER_ELECTION_HARD_COOLDOWN_MS = 15 * 1000;
+export const LEADER_ELECTION_REQUEST_TIMEOUT_MS = 5000;
+export const LEADER_ELECTION_MAX_RETRIES = 3;
 
 export const WIREGUARD_NETWORK_PREFIX = "10.0.0";
 export const WIREGUARD_CIDR = 24;

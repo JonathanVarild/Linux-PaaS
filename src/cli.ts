@@ -44,6 +44,13 @@ program
 		await sendIpcCommand("status", {});
 	});
 
+program
+	.command("reelect")
+	.description("Requests a new leader election.")
+	.action(async () => {
+		await sendIpcCommand("reelect", {});
+	});
+
 const deployCommand = program.command("deploy").description("Adds or updates desired service deployments in cluster config.");
 
 deployCommand
