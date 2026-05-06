@@ -8,8 +8,6 @@ import {
 	PATRONI_UID,
 	PATRONI_GID,
 	CONFIG_HASH_FILENAME,
-	ETCD_READY_RETRY_COUNT,
-	ETCD_READY_RETRY_DELAY_MS,
 	ETCD_SERVICE_NAME,
 } from "../constants";
 import { PatroniService, WebService } from "../models/config";
@@ -20,7 +18,6 @@ import { generateWebServiceFiles } from "./webServiceConfigFiles";
 import { getClusterConfig, hasClusterConfig, type Cluster, type ClusterNode } from "./config";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { delay } from "../utils/misc";
 import crypto from "crypto";
 
 const execFileAsync = promisify(execFile);
@@ -220,9 +217,6 @@ export async function signalService(directoryPath: string, serviceName: string, 
 export async function addMissingEtcdMembers(nodes: ClusterNode[]): Promise<void> {
 	if (nodes.length === 0) return;
 
-	// Make a etcd health check to ensure that etcd is ready to accept commands.
-	await waitForEtcd();
-
 	// Create a set of peer URLs that are already part of the etcd cluster.
 	const currentPeerURLs = new Set(await getEtcdMembers());
 
@@ -245,30 +239,6 @@ async function getEtcdMembers(): Promise<string[]> {
 	const output = await runEtcdctl(["member", "list", "-w", "json"]);
 	const parsed = JSON.parse(output) as { members?: Array<{ peerURLs?: string[] }> };
 	return (parsed.members ?? []).flatMap((member) => member.peerURLs ?? []);
-}
-
-/**
- * Function used to wait for etcd to be ready by checking its health endpoint.
- * @returns A promise that resolves once etcd is deemed healthy, or rejects if we timeout.
- */
-async function waitForEtcd(): Promise<void> {
-	// Variable for storing the last error we received.
-	let lastError: Error | null = null;
-
-	// Loop and retry the health checks until we reach the retry limit.
-	for (let i = 0; i < ETCD_READY_RETRY_COUNT; i++) {
-		try {
-			// Run the etcd health check command and return if it succeeds.
-			await runEtcdctl(["endpoint", "health"]);
-			return;
-		} catch (error) {
-			// Store the error and wait for the retry delay.
-			lastError = error instanceof Error ? error : new Error("Etcd health check failed with unknown error.");
-			await delay(ETCD_READY_RETRY_DELAY_MS);
-		}
-	}
-
-	throw lastError;
 }
 
 /**

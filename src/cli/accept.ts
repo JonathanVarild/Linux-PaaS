@@ -80,6 +80,8 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 				return res.status(409).send(error.message);
 			} else if (error instanceof NodeAlreadyExistsError) {
 				return res.status(409).send("A node with the same hostname or IP already exists in the cluster. Remove existing node from configuration before trying again.");
+			} else if (error instanceof Error) {
+				return res.status(503).send(error.message);
 			}
 
 			throw error;
