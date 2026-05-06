@@ -54,7 +54,7 @@ program
 
 program
 	.command("logs")
-	.description("Stream the cluster node logs to the console.")
+	.description("Stream the daemon logs to the console.")
 	.action(async () => {
 		await logsCommandHandler();
 	});
