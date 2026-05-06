@@ -13,6 +13,9 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT_DIR="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
 NPM_BIN="$(command -v npm)"
 
+cd "${PROJECT_DIR}"
+"${NPM_BIN}" install --omit=dev
+
 cat >"${SERVICE_PATH}" <<EOF
 [Unit]
 Description=Linux PaaS daemon

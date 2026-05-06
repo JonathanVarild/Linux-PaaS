@@ -40,6 +40,8 @@ import {
 	HTTP_DAEMON_PORT,
 	LEADER_ELECTION_INTERVAL_MS,
 	LEADER_ELECTION_MAX_RETRIES,
+	PATRONI_PORT_END,
+	PATRONI_POSTGRES_PORT_START,
 	NODE_PING_INTERVAL_MS,
 	PATRONI_PORT_START,
 	PATRONI_REST_PORT_START,
@@ -299,7 +301,7 @@ export class Cluster {
 			domain,
 			internal_port,
 			type: "web",
-			exposed_port: allocatePort(usedPorts, WEB_EXPOSED_PORT_START, existingService?.exposed_port),
+			exposed_port: allocatePort(usedPorts, WEB_EXPOSED_PORT_START, 65535, existingService?.exposed_port),
 		};
 
 		this.setService(service);
@@ -315,10 +317,10 @@ export class Cluster {
 			service_id,
 			sync_mode,
 			type: "patroni",
-			postgres_port: allocatePort(usedPorts, PATRONI_PORT_START, existingService?.postgres_port),
-			read_write_port: allocatePort(usedPorts, PATRONI_PORT_START, existingService?.read_write_port),
-			read_only_port: allocatePort(usedPorts, PATRONI_PORT_START, existingService?.read_only_port),
-			patroni_rest_port: allocatePort(usedPorts, PATRONI_REST_PORT_START, existingService?.patroni_rest_port),
+			postgres_port: allocatePort(usedPorts, PATRONI_POSTGRES_PORT_START, 65535, existingService?.postgres_port),
+			read_write_port: allocatePort(usedPorts, PATRONI_PORT_START, PATRONI_PORT_END, existingService?.read_write_port),
+			read_only_port: allocatePort(usedPorts, PATRONI_PORT_START, PATRONI_PORT_END, existingService?.read_only_port),
+			patroni_rest_port: allocatePort(usedPorts, PATRONI_REST_PORT_START, 65535, existingService?.patroni_rest_port),
 		};
 
 		this.setService(service);
@@ -557,13 +559,13 @@ function listUsedServicePorts(services: ClusterServices, excludedId?: string): S
 	return usedPorts;
 }
 
-function allocatePort(usedPorts: Set<number>, startPort: number, requestedPort: number | undefined): number {
-	if (requestedPort && !usedPorts.has(requestedPort)) {
+function allocatePort(usedPorts: Set<number>, startPort: number, endPort: number, requestedPort: number | undefined): number {
+	if (requestedPort && requestedPort >= startPort && requestedPort <= endPort && !usedPorts.has(requestedPort)) {
 		usedPorts.add(requestedPort);
 		return requestedPort;
 	}
 
-	for (let port = startPort; port <= 65535; port++) {
+	for (let port = startPort; port <= endPort; port++) {
 		if (usedPorts.has(port)) continue;
 		usedPorts.add(port);
 		return port;

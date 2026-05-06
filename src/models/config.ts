@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Ipv4Schema } from "./networking";
-import { PATRONI_PORT_START, PATRONI_REST_PORT_START, WEB_EXPOSED_PORT_START } from "../constants";
+import { PATRONI_PORT_END, PATRONI_PORT_START, PATRONI_REST_PORT_START, WEB_EXPOSED_PORT_START } from "../constants";
 
 export const ServiceIdSchema = z
 	.string()
@@ -40,10 +40,10 @@ const PatroniServiceInfoSchema = z.object({
 	service_id: ServiceIdSchema,
 	type: z.literal("patroni"),
 	sync_mode: z.enum(["async", "sync"]),
-	read_write_port: z.number().int().min(1).max(65535),
-	read_only_port: z.number().int().min(1).max(65535),
+	read_write_port: z.number().int().min(PATRONI_PORT_START).max(PATRONI_PORT_END),
+	read_only_port: z.number().int().min(PATRONI_PORT_START).max(PATRONI_PORT_END),
 	patroni_rest_port: z.number().int().min(PATRONI_REST_PORT_START).max(65535).optional(),
-	postgres_port: z.number().int().min(PATRONI_PORT_START).max(65535).optional(),
+	postgres_port: z.number().int().min(1).max(65535).optional(),
 });
 export type PatroniService = z.infer<typeof PatroniServiceInfoSchema>;
 

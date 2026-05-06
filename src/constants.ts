@@ -34,6 +34,8 @@ export const WIREGUARD_PRIVATE_KEY_PATH = path.join(CONFIG_PATH_DIR, "private.ke
 
 export const WEB_EXPOSED_PORT_START = 15000;
 export const PATRONI_PORT_START = 5432;
+export const PATRONI_PORT_END = PATRONI_PORT_START + 2048;
+export const PATRONI_POSTGRES_PORT_START = PATRONI_PORT_END + 1;
 export const PATRONI_REST_PORT_START = 8008;
 export const PATRONI_UID = 101;
 export const PATRONI_GID = 103;
