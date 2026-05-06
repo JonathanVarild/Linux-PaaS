@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { sendIpcCommand } from "./utils/ipc";
 import { getPublicIP } from "./utils/networking";
 import { validateEnvironment } from "./utils/misc";
+import { logsCommandHandler } from "./cli/logs";
 
 validateEnvironment();
 
@@ -49,6 +50,13 @@ program
 	.description("Requests a new leader election.")
 	.action(async () => {
 		await sendIpcCommand("reelect", {});
+	});
+
+program
+	.command("logs")
+	.description("Stream the cluster node logs to the console.")
+	.action(async () => {
+		await logsCommandHandler();
 	});
 
 const deployCommand = program.command("deploy").description("Adds or updates desired service deployments in cluster config.");
