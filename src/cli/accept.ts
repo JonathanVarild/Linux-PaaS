@@ -81,6 +81,24 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 			} else if (error instanceof NodeAlreadyExistsError) {
 				return res.status(409).send("A node with the same hostname or IP already exists in the cluster. Remove existing node from configuration before trying again.");
 			} else if (error instanceof Error) {
+				const detail = (error as Error & { stderr?: string }).stderr || error.message;
+
+				if (detail.includes("not enough started members")) {
+					return res
+						.status(503)
+						.send(
+							"Currently unable to join cluser due to coordinator's Etcd cluster not having enough running members. Bring more nodes back online, wait for them to start, or finish joining the cluster before trying again.",
+						);
+				}
+
+				if (detail.includes("unhealthy cluster") || detail.includes("context deadline exceeded")) {
+					return res
+						.status(503)
+						.send(
+							"Unable to join this node because the coordinator's etcd cluster is unhealthy or unavailable. Ensure the coordinator and its Etcd service are healthy before trying again.",
+						);
+				}
+
 				return res.status(503).send(error.message);
 			}
 
