@@ -64,8 +64,7 @@ export async function acceptServerHandler(_args: unknown, stream: OutputStream):
 		const normalizedIp = normalizeIp(req.ip as string);
 
 		try {
-			clusterConfig.joinNode(joinRequestResult.data.hostname, normalizedIp, joinRequestResult.data.wg_public_key);
-			const joinedNode = clusterConfig.getNodeByHostname(joinRequestResult.data.hostname)!;
+			const joinedNode = await clusterConfig.joinNode(joinRequestResult.data.hostname, normalizedIp, joinRequestResult.data.wg_public_key);
 			syncConfigToCluster(clusterConfig, [clusterConfig.getLocalNode().id, joinedNode.id]).catch(() => undefined);
 
 			stream.sendOutput(`Successfully joined node ${req.body.hostname} (${normalizedIp}).`);

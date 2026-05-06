@@ -82,7 +82,11 @@ async function setupEtcd(cluster: Cluster): Promise<void> {
 	// Check if we are the coordinator node, if we have more than 1 node in the cluster, and if the compose file exists (indicating etcd has been set up before).
 	if (cluster.isCoordinatorNode(cluster.getLocalNode()) && cluster.nodes.length > 1 && fs.existsSync(path.join(ETCD_PATH_DIR, "docker-compose.yml"))) {
 		// Add missing etcd members if any new nodes were added during operation so that we don't need to restart etcd.
-		await addMissingEtcdMembers(cluster.nodes);
+		try {
+			await addMissingEtcdMembers(cluster.nodes);
+		} catch (error) {
+			console.warn(`Failed to add missing etcd members: ${error instanceof Error ? error.message : "Unknown error."}`);
+		}
 	}
 
 	// Write etcd config files from templates and deploy the service if there were any changes.
@@ -216,24 +220,20 @@ export async function signalService(directoryPath: string, serviceName: string, 
 export async function addMissingEtcdMembers(nodes: ClusterNode[]): Promise<void> {
 	if (nodes.length === 0) return;
 
-	try {
-		// Make a etcd health check to ensure that etcd is ready to accept commands.
-		await waitForEtcd();
+	// Make a etcd health check to ensure that etcd is ready to accept commands.
+	await waitForEtcd();
 
-		// Create a set of peer URLs that are already part of the etcd cluster.
-		const currentPeerURLs = new Set(await getEtcdMembers());
+	// Create a set of peer URLs that are already part of the etcd cluster.
+	const currentPeerURLs = new Set(await getEtcdMembers());
 
-		// Loop through the nodes in the cluster.
-		for (const node of nodes) {
-			// Get the current node peer URL and check if it's already part of the etcd config, and skip if it is.
-			const peerUrl = getEtcdPeerUrl(node);
-			if (currentPeerURLs.has(peerUrl)) continue;
+	// Loop through the nodes in the cluster.
+	for (const node of nodes) {
+		// Get the current node peer URL and check if it's already part of the etcd config, and skip if it is.
+		const peerUrl = getEtcdPeerUrl(node);
+		if (currentPeerURLs.has(peerUrl)) continue;
 
-			// Add the new member to the etcd cluster using the member add command.
-			await runEtcdctl(["member", "add", `node-${node.id}`, `--peer-urls=${peerUrl}`]);
-		}
-	} catch (error) {
-		console.warn(`Failed to add missing etcd members: ${error instanceof Error ? error.message : "Unknown error."}`);
+		// Add the new member to the etcd cluster using the member add command.
+		await runEtcdctl(["member", "add", `node-${node.id}`, `--peer-urls=${peerUrl}`]);
 	}
 }
 
@@ -377,5 +377,7 @@ export async function runComposeCommand(directoryPath: string, args: string[], r
 // Add missing etcd members if we failed at some point.
 setInterval(() => {
 	if (!hasClusterConfig()) return;
-	addMissingEtcdMembers(getClusterConfig().nodes);
+	addMissingEtcdMembers(getClusterConfig().nodes).catch((error) => {
+		console.warn(`Failed to add missing etcd members: ${error instanceof Error ? error.message : "Unknown error."}`);
+	});
 }, 60 * 1000);

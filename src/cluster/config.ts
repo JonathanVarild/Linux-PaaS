@@ -30,7 +30,7 @@ import fetch from "node-fetch";
 import { delay } from "../utils/misc";
 import { StartupPingResponseSchema } from "../models/networking";
 import { requestLeaderElection, attemptLeaderElection } from "./leaderElection";
-import { setupServices } from "./serviceDeployment";
+import { addMissingEtcdMembers, setupServices } from "./serviceDeployment";
 import {
 	CONFIG_PATH_CONFIG,
 	CONFIG_PATH_NODES,
@@ -259,7 +259,7 @@ export class Cluster {
 		return Object.entries(this.services_internal).sort(([left], [right]) => left.localeCompare(right));
 	}
 
-	joinNode(hostname: string, publicIp: string, wgPublicKey: string): void {
+	async joinNode(hostname: string, publicIp: string, wgPublicKey: string): Promise<ClusterNode> {
 		const hostnameExists = this.nodes_internal.some((node) => node.hostname === hostname);
 		const wireguardPublicKeyExists = this.nodes_internal.some((node) => node.wireguardPublicKey === wgPublicKey);
 		const publicIpExists = this.nodes_internal.some((node) => node.publicIp === publicIp);
@@ -282,12 +282,14 @@ export class Cluster {
 		}
 
 		const newNode = ClusterNode.create(nextNodeId, hostname, publicIp, wgPublicKey);
+		await addMissingEtcdMembers([...this.nodes_internal, newNode]);
 
 		this.nodes_internal.push(newNode);
 		this.nodes_internal = sortClusterNodes(this.nodes_internal);
 		this.config.updated_at = new Date().toISOString();
 		saveClusterConfigToDisk(this);
 		syncWireguardPeersFromClusterConfig();
+		return newNode;
 	}
 
 	setWebService(service_id: string, image: string, domain: string, internal_port: number): WebService {
