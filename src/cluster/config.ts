@@ -350,6 +350,16 @@ export class Cluster {
 		return service;
 	}
 
+	removeService(serviceId: string): ClusterService {
+		const service = this.getService(serviceId);
+		if (!service) throw new Error(`Service '${serviceId}' does not exist.`);
+
+		delete this.services_internal[serviceId];
+		this.config.updated_at = new Date().toISOString();
+		saveClusterConfigToDisk(this);
+		return service;
+	}
+
 	private setService(service: ClusterService): void {
 		parseOrThrow(ClusterServiceSchema, service, new ClusterConfigError());
 		const existingService = this.services_internal[service.service_id];

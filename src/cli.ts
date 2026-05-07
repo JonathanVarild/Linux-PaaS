@@ -45,6 +45,14 @@ program
 	});
 
 program
+	.command("remove")
+	.description("Removes a desired service deployment from cluster config.")
+	.argument("<id>", "The ID of the service to remove.")
+	.action(async (id: string) => {
+		await sendIpcCommand("remove", { id });
+	});
+
+program
 	.command("config")
 	.description("Displays the current cluster configuration.")
 	.action(async () => {

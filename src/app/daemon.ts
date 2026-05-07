@@ -7,6 +7,7 @@ import { deployServiceHandler } from "../cli/deploy";
 import { joinServerHandler } from "../cli/join";
 import { kickNodeHandler } from "../cli/kick";
 import { reelectLeaderHandler } from "../cli/reelect";
+import { removeServiceHandler } from "../cli/remove";
 import { statusServerHandler } from "../cli/status";
 
 import type { Socket } from "net";
@@ -31,6 +32,7 @@ const commandHandlers: Record<string, CommandHandler> = {
 	join: joinServerHandler,
 	kick: kickNodeHandler,
 	reelect: reelectLeaderHandler,
+	remove: removeServiceHandler,
 	status: statusServerHandler,
 };
 

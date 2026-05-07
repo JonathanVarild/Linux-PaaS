@@ -1,15 +1,6 @@
 import fs from "fs";
 import path from "path";
-import {
-	HAPROXY_SERVICE_NAME,
-	CONFIG_PATH_SERVICES_DIR,
-	ETCD_PATH_DIR,
-	HAPROXY_PATH_DIR,
-	PATRONI_UID,
-	PATRONI_GID,
-	CONFIG_HASH_FILENAME,
-	ETCD_SERVICE_NAME,
-} from "../constants";
+import { HAPROXY_SERVICE_NAME, CONFIG_PATH_SERVICES_DIR, ETCD_PATH_DIR, HAPROXY_PATH_DIR, PATRONI_UID, PATRONI_GID, CONFIG_HASH_FILENAME, ETCD_SERVICE_NAME } from "../constants";
 import { PatroniService, WebService } from "../models/config";
 import { generateEtcdFiles, getEtcdPeerUrl } from "./etcdConfigFiles";
 import { generateHaproxyFiles } from "./haproxyConfigFiles";
@@ -55,6 +46,8 @@ export function setupServices(cluster: Cluster): Promise<void> {
 				if (service.type === "web") await setupWebService(cluster, id, service);
 				else await setupPatroniService(cluster, id, service);
 			}
+
+			await stopRemovedServices(cluster);
 		} catch (error) {
 			console.warn(`Failed to set up managed services: ${error instanceof Error ? error.message : "Unknown error."}`);
 		}
@@ -151,6 +144,20 @@ async function setupPatroniService(cluster: Cluster, serviceId: string, service:
 
 	// Generate config files from template, wriet them to the service directory, and deploy the service.
 	if (writeServiceConfigs(serviceDirectory, generatePatroniServiceFiles(cluster, service))) await runComposeUp(serviceDirectory);
+}
+
+/**
+ * Function to clean up services that are no longer defined in config but still have config files and might be running.
+ * @param cluster The cluster configuration class.
+ * @returns A promise that resolves once the cleanup process has been triggered.
+ */
+async function stopRemovedServices(cluster: Cluster): Promise<void> {
+	const configuredServiceIds = new Set(cluster.getSortedServices().map(([serviceId]) => serviceId));
+
+	for (const directory of fs.readdirSync(CONFIG_PATH_SERVICES_DIR, { withFileTypes: true })) {
+		if (!directory.isDirectory() || configuredServiceIds.has(directory.name)) continue;
+		await runComposeDown(path.join(CONFIG_PATH_SERVICES_DIR, directory.name));
+	}
 }
 
 /**
@@ -267,7 +274,7 @@ export async function runComposeUp(directoryPath: string, forceRecreate = true):
  * @returns A promise that resolves once the command has completed.
  */
 export async function runComposeDown(directoryPath: string): Promise<void> {
-	if (!fs.existsSync(directoryPath)) return;
+	if (!fs.existsSync(path.join(directoryPath, "docker-compose.yml"))) return;
 	await runComposeCommand(directoryPath, ["down", "--remove-orphans"]);
 }
 

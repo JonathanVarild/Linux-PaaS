@@ -14,6 +14,7 @@
 		"accept": "tsx src/cli.ts accept",
 		"join": "tsx src/cli.ts join",
 		"kick": "tsx src/cli.ts kick",
+		"remove": "tsx src/cli.ts remove",
 		"deploy": "tsx src/cli.ts deploy",
 		"status": "tsx src/cli.ts status",
 		"reelect": "tsx src/cli.ts reelect",
