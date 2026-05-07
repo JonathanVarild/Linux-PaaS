@@ -52,7 +52,7 @@ export function setupServices(cluster: Cluster): Promise<void> {
 
 			// Loop through user defined services and set them up.
 			for (const [id, service] of cluster.getSortedServices()) {
-				if (service.type === "web") await setupWebService(id, service);
+				if (service.type === "web") await setupWebService(cluster, id, service);
 				else await setupPatroniService(cluster, id, service);
 			}
 		} catch (error) {
@@ -124,12 +124,12 @@ async function setupHaproxy(cluster: Cluster): Promise<void> {
  * @param service The configuration for the web service.
  * @return A promise that resolves once the setup process has been triggered.
  */
-async function setupWebService(serviceId: string, service: WebService): Promise<void> {
+async function setupWebService(cluster: Cluster, serviceId: string, service: WebService): Promise<void> {
 	// Create a path where to store the generated config files for this service.
 	const serviceDirectory = path.join(CONFIG_PATH_SERVICES_DIR, serviceId);
 
 	// Generate config files from template, wriet them to the service directory, and deploy the service.
-	if (writeServiceConfigs(serviceDirectory, generateWebServiceFiles(service))) await runComposeUp(serviceDirectory);
+	if (writeServiceConfigs(serviceDirectory, generateWebServiceFiles(service, cluster.getLocalNode().wireguardIp))) await runComposeUp(serviceDirectory);
 }
 
 /**

@@ -3,4 +3,4 @@ services:
     image: {IMAGE}
     restart: unless-stopped
     ports:
-      - "{EXPOSED_PORT}:{INTERNAL_PORT}"
+      - "{WIREGUARD_IP}:{EXPOSED_PORT}:{INTERNAL_PORT}"

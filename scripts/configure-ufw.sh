@@ -19,6 +19,7 @@ ufw default allow outgoing
 # Set basic rules for public services.
 ufw allow 22/tcp # SSH access
 ufw allow 80/tcp # HTTP access
+ufw allow 8404/tcp # HAProxy dashboard.
 ufw allow 8443/tcp # Accept/Join API server.
 ufw allow 51820/udp # WireGuard listening port.
 ufw allow 5432:7480/tcp # Public Patroni proxy range.
