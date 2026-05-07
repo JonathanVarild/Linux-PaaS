@@ -108,7 +108,8 @@ async function checkCluster(): Promise<void> {
 	const nodeReports = (await Promise.all(clusterConfig.nodes.map((node) => fetchNodeReport(node)))).filter((report): report is ClusterNodeReport => report !== null);
 
 	// Check if any nodes require loadBalancing if load would be unevenly distributed.
-	if (await handlePatroniLoadBalancing(nodeReports)) return;
+	//if (await handlePatroniLoadBalancing(nodeReports)) return;
+	// Disabled until I find a better way to get these two to stop fighting each other.
 
 	// CHeck if any nodes require loadBalancing based on number of patroni leaderships.
 	if (await handlePatroniBalancing(nodeReports)) return;
