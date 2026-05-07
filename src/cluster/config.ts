@@ -296,7 +296,7 @@ export class Cluster {
 		return newNode;
 	}
 
-	setWebService(service_id: string, image: string, domain: string, internal_port: number): WebService {
+	setWebService(service_id: string, image: string, domain: string, internal_port: number, env: Record<string, string> = {}): WebService {
 		const existingService = this.getService(service_id);
 		if (existingService && existingService.type !== "web") throw new ServiceIdConflictError(service_id);
 
@@ -309,6 +309,7 @@ export class Cluster {
 			type: "web",
 			exposed_port: allocatePort(usedPorts, WEB_EXPOSED_PORT_START, 65535, existingService?.exposed_port),
 		};
+		if (Object.keys(env).length > 0) service.env = env;
 
 		this.setService(service);
 		return service;

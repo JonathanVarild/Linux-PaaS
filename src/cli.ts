@@ -61,6 +61,16 @@ program
 
 const deployCommand = program.command("deploy").description("Adds or updates desired service deployments in cluster config.");
 
+function parseEnv(value: string, previous: Record<string, string> = {}): Record<string, string> {
+	const index = value.indexOf("=");
+	if (index <= 0) throw new Error("Environment variables entered as KEY=VALUE.");
+
+	return {
+		...previous,
+		[value.slice(0, index)]: value.slice(index + 1),
+	};
+}
+
 deployCommand
 	.command("web")
 	.description("Adds or updates a stateless web app deployment.")
@@ -68,7 +78,8 @@ deployCommand
 	.argument("<image>", "The container image to deploy.")
 	.argument("<domain>", "The domain to route incoming traffic for this service.")
 	.argument("<internal-port>", "The port that the service listens on inside the container.")
-	.action(async (id: string, image: string, domain: string, internalPort: string) => {
+	.option("--env <KEY=VALUE>", "Set an environment variable.", parseEnv, {})
+	.action(async (id: string, image: string, domain: string, internalPort: string, options: { env: Record<string, string> }) => {
 		const parsedPort = Number.parseInt(internalPort, 10);
 		if (!Number.isInteger(parsedPort) || parsedPort <= 0) {
 			throw new Error("Internal port must be a positive integer.");
@@ -80,6 +91,7 @@ deployCommand
 			image,
 			domain,
 			internalPort: parsedPort,
+			env: options.env,
 		});
 	});
 

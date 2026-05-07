@@ -2,5 +2,6 @@ services:
   web:
     image: {IMAGE}
     restart: unless-stopped
+{ENVIRONMENT}
     ports:
       - "{WIREGUARD_IP}:{EXPOSED_PORT}:{INTERNAL_PORT}"
