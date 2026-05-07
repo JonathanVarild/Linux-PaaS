@@ -107,61 +107,13 @@ async function checkCluster(): Promise<void> {
 	// Get the reports from all nodes in the cluster, and filter out any that failed.
 	const nodeReports = (await Promise.all(clusterConfig.nodes.map((node) => fetchNodeReport(node)))).filter((report): report is ClusterNodeReport => report !== null);
 
-	// Check if any nodes require loadBalancing if load would be unevenly distributed.
-	//if (await handlePatroniLoadBalancing(nodeReports)) return;
-	// Disabled until I find a better way to get these two to stop fighting each other.
-
-	// CHeck if any nodes require loadBalancing based on number of patroni leaderships.
+	// Check if any nodes require Patroni leadership balancing.
 	if (await handlePatroniBalancing(nodeReports)) return;
 
 	// Check if any nodes require rebooting, and if so, reboot them.
 	if (await handleRequiredReboots(nodeReports)) return;
 
 	console.log("Cluster check completed without actions.");
-}
-
-/**
- * Function that tries to balance load in the cluster by promoting a new patroni leader away from a overloaded node.
- * @param nodeReports The reports from the nodes in the cluster.
- * @returns A promise that resolves to true if we successfully promoted a new leader, false otherwise.
- */
-async function handlePatroniLoadBalancing(nodeReports: ClusterNodeReport[]): Promise<boolean> {
-	// Return if there are no node that reported.
-	if (nodeReports.length === 0) return false;
-
-	// Calculate the average load and find any node that has more than 100% higher load than average.
-	const averageNodeLoad = nodeReports.reduce((sum, report) => sum + report.averageLoad, 0) / nodeReports.length;
-	const overloadedReport = nodeReports.find((report) => report.patroniLeaderships.length > 0 && report.averageLoad > averageNodeLoad * 2);
-
-	// Return if no nodes are overloaded.
-	if (!overloadedReport) return false;
-
-	// Find node candidates that have less than 50% of the average load.
-	const potentialCandidate = nodeReports.find((report) => report.node.id !== overloadedReport.node.id && report.averageLoad < averageNodeLoad * 0.5);
-	if (!potentialCandidate) return false;
-
-	// Get the cluster config once for service lookup.
-	const clusterConfig = getClusterConfig();
-
-	// Loop through the patroni services on the overloaded node.
-	for (const serviceId of overloadedReport.patroniLeaderships) {
-		// Get the service running on the overloaded node, make sure its a patroni service, and check if its healthy.
-		const service = clusterConfig.getService(serviceId);
-		if (!service || service.type !== "patroni") continue;
-		if (!(await getPatroniHealth(service))) continue;
-
-		// Log the action.
-		console.log(
-			`Promoting node #${potentialCandidate.node.id} to leader of service '${serviceId}' to balance load from node #${overloadedReport.node.id} (${overloadedReport.averageLoad} -> ${potentialCandidate.averageLoad}).`,
-		);
-
-		// Promote the candidate we found.
-		if (!(await promoteToPatroniLeader(service, potentialCandidate.node))) return false;
-		return true;
-	}
-
-	// Return false if we weren't able to find a suitable service to promote.
-	return false;
 }
 
 /**
@@ -199,7 +151,7 @@ async function handlePatroniBalancing(nodeReports: ClusterNodeReport[]): Promise
 		if (!(await getPatroniHealth(service))) continue;
 
 		// Log the action.
-		console.log(`Promoting node #${potentialCandidate.node.id} to leader of service '${serviceId}' to balance load from overloaded node #${overloadedReport.node.id}.`);
+		console.log(`Promoting node #${potentialCandidate.node.id} to leader of service '${serviceId}' to balance Patroni leaderships from node #${overloadedReport.node.id}.`);
 
 		// Promote the candidate we found.
 		if (!(await promoteToPatroniLeader(service, potentialCandidate.node))) return false;
