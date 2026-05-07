@@ -32,6 +32,19 @@ program
 	});
 
 program
+	.command("kick")
+	.description("Removes a node from the cluster.")
+	.argument("<node-id>", "The ID of the node to remove.")
+	.action(async (nodeId: string) => {
+		const parsedNodeId = Number.parseInt(nodeId, 10);
+		if (!Number.isInteger(parsedNodeId) || parsedNodeId < 1 || parsedNodeId > 255) {
+			throw new Error("Node ID must be an integer between 1 and 255.");
+		}
+
+		await sendIpcCommand("kick", { nodeId: parsedNodeId });
+	});
+
+program
 	.command("config")
 	.description("Displays the current cluster configuration.")
 	.action(async () => {

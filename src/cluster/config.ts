@@ -296,6 +296,22 @@ export class Cluster {
 		return newNode;
 	}
 
+	kickNode(nodeId: number): ClusterNode {
+		const node = this.getNodeById(nodeId);
+		if (!node) throw new CouldNotFindNodeError();
+		if (this.isCoordinatorNode(node)) throw new Error("Cannot kick the coordinator node.");
+
+		this.nodes_internal = sortClusterNodes(this.nodes_internal.filter((clusterNode) => clusterNode.id !== nodeId));
+		if (this.config.leader_node_id === nodeId) {
+			this.config.leader_node_id = this.config.coordinator_node_id;
+		}
+
+		this.config.updated_at = new Date().toISOString();
+		saveClusterConfigToDisk(this);
+		syncWireguardPeersFromClusterConfig();
+		return node;
+	}
+
 	setWebService(service_id: string, image: string, domain: string, internal_port: number, env: Record<string, string> = {}): WebService {
 		const existingService = this.getService(service_id);
 		if (existingService && existingService.type !== "web") throw new ServiceIdConflictError(service_id);
