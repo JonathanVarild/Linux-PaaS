@@ -32,7 +32,7 @@ const WebServiceInfoSchema = z.object({
 	image: z.string().trim().min(1),
 	domain: z.string().trim().min(1),
 	internal_port: z.number().int().min(1).max(65535),
-	exposed_port: z.number().int().min(WEB_EXPOSED_PORT_START).max(65535).optional(),
+	exposed_port: z.number().int().min(WEB_EXPOSED_PORT_START).max(65535),
 });
 export type WebService = z.infer<typeof WebServiceInfoSchema>;
 
@@ -42,8 +42,8 @@ const PatroniServiceInfoSchema = z.object({
 	sync_mode: z.enum(["async", "sync"]),
 	read_write_port: z.number().int().min(PATRONI_PORT_START).max(PATRONI_PORT_END),
 	read_only_port: z.number().int().min(PATRONI_PORT_START).max(PATRONI_PORT_END),
-	patroni_rest_port: z.number().int().min(PATRONI_REST_PORT_START).max(65535).optional(),
-	postgres_port: z.number().int().min(1).max(65535).optional(),
+	patroni_rest_port: z.number().int().min(PATRONI_REST_PORT_START).max(65535),
+	postgres_port: z.number().int().min(1).max(65535),
 });
 export type PatroniService = z.infer<typeof PatroniServiceInfoSchema>;
 

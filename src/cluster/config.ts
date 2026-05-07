@@ -245,6 +245,10 @@ export class Cluster {
 		return this.coordinatorNode.id === node.id;
 	}
 
+	isLeaderNode(node: ClusterNode): boolean {
+		return this.leaderNode.id === node.id;
+	}
+
 	setLeaderNode(nodeId: number): boolean {
 		if (!this.getNodeById(nodeId)) throw new CouldNotFindNodeError();
 		if (this.config.leader_node_id === nodeId) return false;

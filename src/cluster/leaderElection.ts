@@ -1,8 +1,9 @@
 import fetch from "node-fetch";
 import os from "os";
-import { HTTP_DAEMON_PORT, LEADER_ELECTION_HARD_COOLDOWN_MS, LEADER_ELECTION_INTERVAL_MS, LEADER_ELECTION_REQUEST_TIMEOUT_MS } from "../constants";
+import { HTTP_DAEMON_PORT, LEADER_ELECTION_HARD_COOLDOWN_MS, LEADER_ELECTION_INTERVAL_MS, LEADER_ELECTION_REQUEST_TIMEOUT_MS, REBOOT_REQUIRED_LOAD_VALUE } from "../constants";
 import { NodeStatusResponseSchema } from "../models/networking";
 import { getClusterConfig, getClusterConfigHash, syncConfigToCluster } from "./config";
+import { nodeNeedsReboot } from "./healthManager";
 
 import type { ClusterNode } from "./config";
 
@@ -18,17 +19,17 @@ let lastLeaderElectionTime = 0;
  * Function used to attempt a new leader election, which will succeed if there are no elections in progress and no cooldowns.
  * @param force If the election is absolutely necessary, a shorter cooldown will be considered.
  */
-export function attemptLeaderElection(force = false): void {
+export function attemptLeaderElection(force = false): boolean {
 	const clusterConfig = getClusterConfig();
 
 	// Ensure that we are the coordinator and that there is no election already in progress
-	if (!clusterConfig.isCoordinatorNode(clusterConfig.getLocalNode())) return;
-	if (leaderElectionPromise) return;
+	if (!clusterConfig.isCoordinatorNode(clusterConfig.getLocalNode())) return false;
+	if (leaderElectionPromise) return false;
 
 	// Check the time since last election, if we pass the hard cooldown, and finally if we pass the regular cooldown or if the election is forced.
 	const elapsedMs = Date.now() - lastLeaderElectionTime;
-	if (elapsedMs < LEADER_ELECTION_HARD_COOLDOWN_MS) return;
-	if (!force && elapsedMs < LEADER_ELECTION_INTERVAL_MS) return;
+	if (elapsedMs < LEADER_ELECTION_HARD_COOLDOWN_MS) return false;
+	if (!force && elapsedMs < LEADER_ELECTION_INTERVAL_MS) return false;
 
 	// Set last election time.
 	lastLeaderElectionTime = Date.now();
@@ -41,20 +42,20 @@ export function attemptLeaderElection(force = false): void {
 		.finally(() => {
 			leaderElectionPromise = null;
 		});
+	return true;
 }
 
 /**
  * Function used by any node to request the coordinator to perform a leader change.
  * @returns A promise that resolves when the request is complete.
  */
-export async function requestLeaderElection(): Promise<void> {
+export async function requestLeaderElection(): Promise<boolean> {
 	const clusterConfig = getClusterConfig();
 	const localNode = clusterConfig.getLocalNode();
 
 	// If we are the coordinator, request the election instantly.
 	if (clusterConfig.isCoordinatorNode(localNode)) {
-		attemptLeaderElection(true);
-		return;
+		return attemptLeaderElection(true);
 	}
 
 	// SEt a request timeout.
@@ -76,13 +77,14 @@ export async function requestLeaderElection(): Promise<void> {
 		});
 
 		// Check if we succeeded.
-		if (response.ok) return;
+		if (response.ok) return true;
 		console.warn(`Failed leader checkup request (${response.status}): ${response.text()}`);
 	} catch (error) {
 		console.warn(`Failed leader checkup request: ${error instanceof Error ? error.message : "Unknown error."}`);
 	} finally {
 		clearTimeout(timeout);
 	}
+	return false;
 }
 
 /**
@@ -122,7 +124,7 @@ async function fetchNodeStatus(node: ClusterNode): Promise<NodeStatus | null> {
 	// Check if we are the local node and return status directly.
 	if (node.hostname === os.hostname()) {
 		return {
-			loadValue: os.loadavg()[1] ?? 0,
+			loadValue: (await nodeNeedsReboot()) ? REBOOT_REQUIRED_LOAD_VALUE : (os.loadavg()[1] ?? 0),
 			offlineNodeIds: getClusterConfig()
 				.nodes.filter((clusterNode) => !clusterNode.status)
 				.map((clusterNode) => clusterNode.id),

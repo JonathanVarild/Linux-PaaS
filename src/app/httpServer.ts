@@ -1,13 +1,47 @@
+import { execFile } from "child_process";
 import express from "express";
 import os from "os";
+import { isPatroniLeader } from "../adapters/patroni";
 import { attemptLeaderElection } from "../cluster/leaderElection";
 import { applyClusterConfig, getClusterConfig, getClusterConfigHash, getConfigPayload, hasClusterConfig } from "../cluster/config";
+import { nodeNeedsReboot } from "../cluster/healthManager";
 import { ClusterConfigRequestSchema, LeaderElectionRequestSchema, StartupPingRequestSchema } from "../models/networking";
-import { HTTP_DAEMON_PORT } from "../constants";
+import { HTTP_DAEMON_PORT, REBOOT_REQUIRED_LOAD_VALUE } from "../constants";
 
 export const expressApp = express();
 
+const REBOOT_RETRY_COUNT = 3;
+
 expressApp.use(express.json());
+
+/**
+ * Function to get a list of patroni services that the local node is currently the leader of.
+ * @returns A promise that resolves to a list of service IDs that the local node is the leader of.
+ */
+async function getLocalPatroniLeaderships(): Promise<string[]> {
+	const clusterConfig = getClusterConfig();
+	const leaderServiceChecks = await Promise.all(
+		clusterConfig.getSortedServices().map(async ([serviceId, service]) => {
+			if (service.type !== "patroni") return null;
+			return (await isPatroniLeader(service)) ? serviceId : null;
+		}),
+	);
+
+	return leaderServiceChecks.filter((serviceId): serviceId is string => serviceId !== null);
+}
+
+/**
+ * Function that waits up to 15 seconds for the local node to be ready for a reboot.
+ * @returns A promise that resolves to true if the node is ready for reboot or false if its still a patroni leader after 15 sec.
+ */
+async function waitUntilRebootSafe(): Promise<boolean> {
+	for (let attempt = 0; attempt < 2; attempt++) {
+		if ((await getLocalPatroniLeaderships()).length === 0) return true;
+		await new Promise((resolve) => setTimeout(resolve, 5000));
+	}
+
+	return false;
+}
 
 expressApp.use((err: Error, _req: express.Request, res: express.Response, next: express.NextFunction) => {
 	if (err instanceof SyntaxError) {
@@ -87,9 +121,9 @@ expressApp.post("/set_config", (req: express.Request, res: express.Response) => 
  * Endpoint for nodes to report their status to the coordinator during leader election.
  * Returns the nodes' current 5 minute load average and which nodes it considers offline.
  */
-expressApp.get("/get_node_status", (_req: express.Request, res: express.Response) => {
+expressApp.get("/get_node_status", async (_req: express.Request, res: express.Response) => {
 	res.json({
-		load_value: os.loadavg()[1] ?? 0,
+		load_value: (await nodeNeedsReboot()) ? REBOOT_REQUIRED_LOAD_VALUE : (os.loadavg()[1] ?? 0),
 		offline_node_ids: getClusterConfig()
 			.nodes.filter((node) => !node.status)
 			.map((node) => node.id),
@@ -122,8 +156,37 @@ expressApp.post("/request_leader_election", (req: express.Request, res: express.
 	}
 
 	// Attempt a leader election.
-	attemptLeaderElection(true);
+	if (attemptLeaderElection(true)) {
+		res.status(202).send();
+	} else {
+		res.status(409).send("Failed to initiate leader election.");
+	}
+});
+
+expressApp.post("/get_node_report", async (_req: express.Request, res: express.Response) => {
+	// Respond with the data.
+	res.json({
+		average_load: os.loadavg()[1] ?? 0,
+		requires_restart: await nodeNeedsReboot(),
+		patroni_leaderships: await getLocalPatroniLeaderships(),
+	});
+});
+
+expressApp.post("/reboot", async (_req: express.Request, res: express.Response) => {
+	if (!(await waitUntilRebootSafe())) {
+		console.warn("Reboot cancelled to avoid instability, node is currently a patroni leader.");
+		res.status(409).send("Node is currently a patroni leader, reboot cancelled to avoid instability.");
+		return;
+	}
+
 	res.status(202).send();
+	setTimeout(() => {
+		execFile("reboot", [], (error) => {
+			if (error) {
+				console.warn(`Failed to reboot node: ${error.message}`);
+			}
+		});
+	}, 1000);
 });
 
 expressApp.listen(HTTP_DAEMON_PORT, () => {

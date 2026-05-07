@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { CLUSTER_HEALTHCHECK_INTERVAL_MS, CONFIG_PATH_SERVICES_DIR, ETCD_PATH_DIR, ETCD_SERVICE_NAME, HAPROXY_PATH_DIR, HAPROXY_SERVICE_NAME } from "../constants";
+import { NODE_HEALTHCHECK_INTERVAL_MS, CONFIG_PATH_SERVICES_DIR, ETCD_PATH_DIR, ETCD_SERVICE_NAME, HAPROXY_PATH_DIR, HAPROXY_SERVICE_NAME } from "../constants";
 import { getClusterConfig, hasClusterConfig } from "./config";
 import { getComposeState, runComposeCommand, runComposeUp } from "./serviceDeployment";
 
@@ -24,10 +24,10 @@ type ContainerState = {
 let healthCheckPromise: Promise<void> | null = null;
 
 /**
- * Function to check the current health of the cluster and attempt to heal any potentially damaged services.
+ * Function to check the current health of the node and attempt to heal any potentially damaged services.
  * @returns Promise that resolves when the health check and any necessary healing is complete.
  */
-async function checkClusterHealth(): Promise<void> {
+async function checkNodeHealth(): Promise<void> {
 	if (!hasClusterConfig()) return;
 	const clusterConfig = getClusterConfig();
 
@@ -141,15 +141,22 @@ export async function checkContainerState(containerId: string): Promise<Containe
 	};
 }
 
+/**
+ * Function that checks if the local node needs a reboot based on if /var/run/reboot-required exists or not.
+ * @returns A promise resolving to true if the node needs a reboot, false otherwise.
+ */
+export async function nodeNeedsReboot(): Promise<boolean> {
+	return fs.existsSync("/var/run/reboot-required");
+}
+
 // Run health checks at regular intervals.
 setInterval(() => {
 	if (healthCheckPromise) return;
-
-	healthCheckPromise = checkClusterHealth()
+	healthCheckPromise = checkNodeHealth()
 		.catch((error) => {
 			console.warn(`Health manager failed: ${error instanceof Error ? error.message : "Unknown error."}`);
 		})
 		.finally(() => {
 			healthCheckPromise = null;
 		});
-}, CLUSTER_HEALTHCHECK_INTERVAL_MS);
+}, NODE_HEALTHCHECK_INTERVAL_MS);

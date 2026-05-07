@@ -29,6 +29,14 @@ export const NodeStatusResponseSchema = z.object({
 	load_value: z.number().min(0),
 	offline_node_ids: z.array(z.number().int().min(1).max(255)),
 });
+export type NodeStatusResponse = z.infer<typeof NodeStatusResponseSchema>;
+
+export const NodeReportResponseSchema = z.object({
+	average_load: z.number().min(0),
+	requires_restart: z.boolean(),
+	patroni_leaderships: z.array(z.string().trim().min(1)),
+});
+export type NodeReportResponse = z.infer<typeof NodeReportResponseSchema>;
 
 export const LeaderElectionRequestSchema = z.object({
 	config_hash: z.string().trim().length(64),
