@@ -28,14 +28,14 @@ import { parseOrThrow } from "../utils/zod";
 import z from "zod";
 import fetch from "node-fetch";
 import { delay } from "../utils/misc";
-import { StartupPingResponseSchema } from "../models/networking";
+import { ConfigCheckResponseSchema } from "../models/networking";
 import { requestLeaderElection, attemptLeaderElection } from "./leaderElection";
 import { addMissingEtcdMembers, setupServices } from "./serviceDeployment";
 import {
 	CONFIG_PATH_CONFIG,
 	CONFIG_PATH_NODES,
 	CONFIG_PATH_SERVICES,
-	CONFIG_PING_RETRY_DELAY_MS,
+	CONFIG_CHECK_INTERVAL_MS,
 	CONFIG_VERSION,
 	HTTP_DAEMON_PORT,
 	LEADER_ELECTION_INTERVAL_MS,
@@ -390,6 +390,7 @@ export class Cluster {
 }
 
 var clusterConfigSingleton: Cluster | null = null;
+let configCheckPromise: Promise<void> | null = null;
 
 function syncWireguardPeersFromClusterConfig(): void {
 	setupWireguardInterface();
@@ -508,67 +509,63 @@ export function getClusterConfig() {
 	return clusterConfigSingleton;
 }
 
-async function syncClusterConfigFromCoordinatorOnStartup(): Promise<void> {
-	while (true) {
-		if (!hasClusterConfig()) return;
-		const clusterConfig = getClusterConfig();
-		if (clusterConfig.coordinatorNode.hostname === os.hostname()) return;
+async function syncClusterConfigFromCoordinator(): Promise<void> {
+	if (!hasClusterConfig()) return;
+	const clusterConfig = getClusterConfig();
+	if (clusterConfig.coordinatorNode.hostname === os.hostname()) return;
 
-		await delay(1000);
+	await delay(1000);
 
-		try {
-			const startupPingResponse = await fetch(`http://${clusterConfig.coordinatorNode.wireguardIp}:${HTTP_DAEMON_PORT}/startup_ping`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"x-access-key": clusterConfig.accessKey,
-				},
-				body: JSON.stringify({ config_hash: getClusterConfigHash() }),
-			});
+	try {
+		const configCheckResponse = await fetch(`http://${clusterConfig.coordinatorNode.wireguardIp}:${HTTP_DAEMON_PORT}/config_check`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"x-access-key": clusterConfig.accessKey,
+			},
+			body: JSON.stringify({ config_hash: getClusterConfigHash() }),
+		});
 
-			const responseBody = await startupPingResponse.text();
+		const responseBody = await configCheckResponse.text();
 
-			if (!startupPingResponse.ok) {
-				console.warn(`Failed startup ping (${startupPingResponse.status}): ${responseBody}. Retrying...`);
-				await delay(CONFIG_PING_RETRY_DELAY_MS);
-				continue;
-			}
-
-			let responseJson: unknown;
-			try {
-				responseJson = JSON.parse(responseBody);
-			} catch {
-				console.warn("Startup ping response is not valid JSON. Retrying...");
-				await delay(CONFIG_PING_RETRY_DELAY_MS);
-				continue;
-			}
-
-			const startupPingResponseResult = StartupPingResponseSchema.safeParse(responseJson);
-			if (!startupPingResponseResult.success) {
-				console.warn("Startup ping response is invalid. Retrying...");
-				await delay(CONFIG_PING_RETRY_DELAY_MS);
-				continue;
-			}
-
-			if (startupPingResponseResult.data.up_to_date) {
-				console.log("Cluster config has not changed since last connection.");
-				return;
-			}
-
-			if (startupPingResponseResult.data.cluster === undefined || startupPingResponseResult.data.nodes === undefined) {
-				console.warn("Startup ping response is missing cluster data. Retrying...");
-				await delay(CONFIG_PING_RETRY_DELAY_MS);
-				continue;
-			}
-
-			applyClusterConfig(startupPingResponseResult.data.cluster, startupPingResponseResult.data.nodes, startupPingResponseResult.data.services);
-			console.log("Synchronized cluster config on startup.");
+		if (!configCheckResponse.ok) {
+			console.warn(`Failed config check (${configCheckResponse.status}): ${responseBody}.`);
 			return;
-		} catch (error) {
-			console.warn(`Coordinator is not ready for startup sync. Retrying...`);
-			await delay(CONFIG_PING_RETRY_DELAY_MS);
 		}
+
+		let responseJson: unknown;
+		try {
+			responseJson = JSON.parse(responseBody);
+		} catch {
+			console.warn("Config check response is not valid JSON.");
+			return;
+		}
+
+		const configCheckResponseResult = ConfigCheckResponseSchema.safeParse(responseJson);
+		if (!configCheckResponseResult.success) {
+			console.warn("Config check response is invalid.");
+			return;
+		}
+
+		if (configCheckResponseResult.data.up_to_date) return;
+
+		if (configCheckResponseResult.data.cluster === undefined || configCheckResponseResult.data.nodes === undefined || configCheckResponseResult.data.services === undefined) {
+			console.warn("Config check response is missing cluster data.");
+			return;
+		}
+
+		applyClusterConfig(configCheckResponseResult.data.cluster, configCheckResponseResult.data.nodes, configCheckResponseResult.data.services);
+		console.log("Synchronized cluster config.");
+	} catch (error) {
+		console.warn("Coordinator is not ready for config check.");
 	}
+}
+
+function runClusterConfigCheck(): void {
+	if (configCheckPromise) return;
+	configCheckPromise = syncClusterConfigFromCoordinator().finally(() => {
+		configCheckPromise = null;
+	});
 }
 
 function listUsedServicePorts(services: ClusterServices, excludedId?: string): Set<number> {
@@ -647,7 +644,8 @@ if (fs.existsSync(CONFIG_PATH_CONFIG)) {
 	setupServices(config);
 }
 
-syncClusterConfigFromCoordinatorOnStartup();
+runClusterConfigCheck();
+setInterval(runClusterConfigCheck, CONFIG_CHECK_INTERVAL_MS);
 setInterval(Cluster.pingNodes, NODE_PING_INTERVAL_MS);
 setInterval(() => {
 	if (!hasClusterConfig()) return;

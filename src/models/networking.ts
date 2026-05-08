@@ -14,11 +14,11 @@ export const ClusterConfigRequestSchema = z.object({
 	services: z.unknown().optional(),
 });
 
-export const StartupPingRequestSchema = z.object({
+export const ConfigCheckRequestSchema = z.object({
 	config_hash: z.string().trim().length(64),
 });
 
-export const StartupPingResponseSchema = z.object({
+export const ConfigCheckResponseSchema = z.object({
 	up_to_date: z.boolean(),
 	cluster: z.unknown().optional(),
 	nodes: z.unknown().optional(),

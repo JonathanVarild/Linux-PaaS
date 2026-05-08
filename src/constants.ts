@@ -7,7 +7,6 @@ export const CONFIG_PATH_SERVICES = path.join(CONFIG_PATH_DIR, "services.json");
 export const CONFIG_PATH_SERVICES_DIR = path.join(CONFIG_PATH_DIR, "services");
 
 export const CONFIG_VERSION = 1;
-export const CONFIG_PING_RETRY_DELAY_MS = 5000;
 export const CONFIG_HASH_FILENAME = ".config-hash";
 
 export const ETCD_PATH_DIR = path.join(CONFIG_PATH_SERVICES_DIR, "_etcd");
@@ -19,6 +18,7 @@ export const SERVICE_TEMPLATES_PATH = path.resolve(process.cwd(), "service_templ
 
 export const HTTP_DAEMON_PORT = 8080;
 export const JOIN_SERVER_PORT = 8443;
+export const CONFIG_CHECK_INTERVAL_MS = 60 * 1000;
 export const NODE_PING_INTERVAL_MS = 1000;
 export const LEADER_ELECTION_INTERVAL_MS = 5 * 60 * 1000;
 export const LEADER_ELECTION_HARD_COOLDOWN_MS = 15 * 1000;

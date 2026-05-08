@@ -5,7 +5,7 @@ import { isPatroniLeader } from "../adapters/patroni";
 import { attemptLeaderElection } from "../cluster/leaderElection";
 import { applyClusterConfig, getClusterConfig, getClusterConfigHash, getConfigPayload, hasClusterConfig } from "../cluster/config";
 import { nodeNeedsReboot } from "../cluster/healthManager";
-import { ClusterConfigRequestSchema, LeaderElectionRequestSchema, StartupPingRequestSchema } from "../models/networking";
+import { ClusterConfigRequestSchema, ConfigCheckRequestSchema, LeaderElectionRequestSchema } from "../models/networking";
 import { HTTP_DAEMON_PORT, REBOOT_REQUIRED_LOAD_VALUE } from "../constants";
 
 export const expressApp = express();
@@ -73,22 +73,22 @@ expressApp.get("/ping", (_req: express.Request, res: express.Response) => {
 });
 
 /**
- * Endpoint for coordinator where nodes send a startup ping to check if their config is up to date and to retrieve the latest config if not.
+ * Endpoint for coordinator where nodes check if their config is up to date and retrieve the latest config if not.
  */
-expressApp.post("/startup_ping", (req: express.Request, res: express.Response) => {
-	const startupPingRequestResult = StartupPingRequestSchema.safeParse(req.body);
-	if (!startupPingRequestResult.success) {
-		res.status(400).send("Startup ping payload is invalid.");
+expressApp.post("/config_check", (req: express.Request, res: express.Response) => {
+	const configCheckRequestResult = ConfigCheckRequestSchema.safeParse(req.body);
+	if (!configCheckRequestResult.success) {
+		res.status(400).send("Config check payload is invalid.");
 		return;
 	}
 
 	const clusterConfig = getClusterConfig();
 	if (clusterConfig.coordinatorNode.hostname !== os.hostname()) {
-		res.status(409).send("Only the coordinator node can process startup pings.");
+		res.status(409).send("Only the coordinator node can process config checks.");
 		return;
 	}
 
-	if (startupPingRequestResult.data.config_hash === getClusterConfigHash()) {
+	if (configCheckRequestResult.data.config_hash === getClusterConfigHash()) {
 		res.json({ up_to_date: true });
 		return;
 	}
