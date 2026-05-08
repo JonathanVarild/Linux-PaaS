@@ -156,6 +156,7 @@ async function stopRemovedServices(cluster: Cluster): Promise<void> {
 
 	for (const directory of fs.readdirSync(CONFIG_PATH_SERVICES_DIR, { withFileTypes: true })) {
 		if (!directory.isDirectory() || configuredServiceIds.has(directory.name)) continue;
+		if (directory.name === "_etcd" || directory.name === "_haproxy") continue;
 		await runComposeDown(path.join(CONFIG_PATH_SERVICES_DIR, directory.name));
 	}
 }
