@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { sendIpcCommand } from "./utils/ipc";
 import { getPublicIP } from "./utils/networking";
 import { validateEnvironment } from "./utils/misc";
-import { logsCommandHandler } from "./cli/logs";
+import { logsCommandHandler, serviceLogsCommandHandler } from "./cli/logs";
 
 validateEnvironment();
 
@@ -75,8 +75,14 @@ program
 
 program
 	.command("logs")
-	.description("Stream the daemon logs to the console.")
-	.action(async () => {
+	.description("Stream the daemon or service logs to the console.")
+	.argument("[service-id]", "The ID of the service to show Docker logs for.")
+	.action(async (serviceId?: string) => {
+		if (serviceId) {
+			await serviceLogsCommandHandler(serviceId);
+			return;
+		}
+
 		await logsCommandHandler();
 	});
 
