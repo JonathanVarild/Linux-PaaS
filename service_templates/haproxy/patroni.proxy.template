@@ -17,7 +17,7 @@ backend patroni_{HAPROXY_NAME}_rw
 
 backend patroni_{HAPROXY_NAME}_ro
     mode tcp
-    balance roundrobin
+    balance leastconn
     option httpchk OPTIONS /read-only
     http-check expect status 200
     default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
