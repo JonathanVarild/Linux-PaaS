@@ -105,8 +105,8 @@ async function setupHaproxy(cluster: Cluster): Promise<void> {
 	// Write the config files, and stop if there were no changes.
 	if (!writeServiceConfigs(HAPROXY_PATH_DIR, files)) return;
 
-	// Try to reload HAProxy with a HUP signal, and do a full compose if that fails or if HAProxy isn't running.
-	if (!(await signalService(HAPROXY_PATH_DIR, HAPROXY_SERVICE_NAME, "HUP"))) {
+	// Try to gracefully reload HAProxy with a SIGUSR2 signal, and do a full compose if that fails or if HAProxy isn't running.
+	if (!(await signalService(HAPROXY_PATH_DIR, HAPROXY_SERVICE_NAME, "SIGUSR2"))) {
 		await runComposeUp(HAPROXY_PATH_DIR);
 	}
 }

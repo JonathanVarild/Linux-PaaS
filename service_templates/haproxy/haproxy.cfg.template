@@ -3,6 +3,7 @@ global
     user haproxy
     group haproxy
     chroot /var/lib/haproxy
+    master-worker
 
 defaults
     log global
