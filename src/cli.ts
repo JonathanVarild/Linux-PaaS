@@ -106,7 +106,8 @@ deployCommand
 	.argument("<domain>", "The domain to route incoming traffic for this service.")
 	.argument("<internal-port>", "The port that the service listens on inside the container.")
 	.option("--env <KEY=VALUE>", "Set an environment variable.", parseEnv, {})
-	.action(async (id: string, image: string, domain: string, internalPort: string, options: { env: Record<string, string> }) => {
+	.option("--health-path <path>", "A HTTP path used by HAProxy to check the health of the service to better react to failures. Must start with a '/'.")
+	.action(async (id: string, image: string, domain: string, internalPort: string, options: { env: Record<string, string>; healthPath?: string }) => {
 		const parsedPort = Number.parseInt(internalPort, 10);
 		if (!Number.isInteger(parsedPort) || parsedPort <= 0) {
 			throw new Error("Internal port must be a positive integer.");
@@ -119,6 +120,7 @@ deployCommand
 			domain,
 			internalPort: parsedPort,
 			env: options.env,
+			healthPath: options.healthPath,
 		});
 	});
 

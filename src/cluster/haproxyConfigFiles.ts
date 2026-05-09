@@ -1,3 +1,4 @@
+import type { WebService } from "../models/config";
 import { generateTemplateFromFile, getHAProxyId } from "../utils/serviceConfig";
 import type { Cluster } from "./config";
 
@@ -33,9 +34,8 @@ function generateServiceProxySections(cluster: Cluster): string {
 			lines.push(
 				generateTemplateFromFile("haproxy/web.proxy.template", {
 					HAPROXY_NAME: getHAProxyId(serviceId),
-					SERVER_LINES: cluster.nodes
-						.map((node) => `    server node_${node.id} ${node.wireguardIp}:${service.exposed_port} check`)
-						.join("\n"),
+					HEALTH_CHECK_LINES: generateWebHealthCheck(service),
+					SERVER_LINES: cluster.nodes.map((node) => `    server node_${node.id} ${node.wireguardIp}:${service.exposed_port} check`).join("\n"),
 				}),
 				"",
 			);
@@ -58,4 +58,10 @@ function generateServiceProxySections(cluster: Cluster): string {
 	}
 
 	return lines.join("\n").trimEnd();
+}
+
+function generateWebHealthCheck(service: WebService): string {
+	const lines = ["    default-server inter 2s fall 3 rise 2"];
+	if (service.health_path) lines.unshift(`    option httpchk GET ${service.health_path}`, "    http-check expect status 200");
+	return lines.join("\n");
 }

@@ -1,5 +1,6 @@
 backend web_{HAPROXY_NAME}
     mode http
     balance leastconn
+{HEALTH_CHECK_LINES}
 {SERVER_LINES}
     http-response set-header X-Backend-Server %[srv_name]

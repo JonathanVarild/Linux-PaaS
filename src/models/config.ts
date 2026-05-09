@@ -32,6 +32,7 @@ const WebServiceInfoSchema = z.object({
 	image: z.string().trim().min(1),
 	domain: z.string().trim().min(1),
 	env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string()).optional(),
+	health_path: z.string().trim().regex(/^\/[^\s]*$/).optional(),
 	internal_port: z.number().int().min(1).max(65535),
 	exposed_port: z.number().int().min(WEB_EXPOSED_PORT_START).max(65535),
 });

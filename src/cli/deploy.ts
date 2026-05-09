@@ -17,6 +17,7 @@ const DeployOptionsSchema = z.discriminatedUnion("type", [
 			.trim()
 			.regex(/^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/),
 		env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string()).optional(),
+		healthPath: z.string().trim().regex(/^\/[^\s]*$/).optional(),
 		internalPort: z.number().int().min(1).max(65535),
 	}),
 	z.object({
@@ -44,7 +45,7 @@ export async function deployServiceHandler(args: unknown, stream: OutputStream):
 
 	// Check if we are deploying a web or patroni service and call the appropriate function.
 	if (options.type === "web") {
-		service = getClusterConfig().setWebService(options.id, options.image, options.domain, options.internalPort, options.env);
+		service = getClusterConfig().setWebService(options.id, options.image, options.domain, options.internalPort, options.env, options.healthPath);
 	} else {
 		service = getClusterConfig().setPatroniService(options.id, options.syncMode);
 	}
