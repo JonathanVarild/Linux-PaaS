@@ -29,3 +29,8 @@ frontend stats
 backend not_found
     mode http
     http-request return status 404 content-type text/plain lf-string "Unknown host\n"
+
+frontend health
+    bind *:8081
+    mode http
+    http-request return status 200 content-type text/plain string "OK\n" if { path /health }

@@ -7,7 +7,8 @@ services:
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     healthcheck:
-      test: ["CMD", "haproxy", "-c", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+      test: ["CMD-SHELL", "printf 'GET /health HTTP/1.0\r\n\r\n' | socat - TCP:127.0.0.1:8081 | grep -q '200'"]
       interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 5s
