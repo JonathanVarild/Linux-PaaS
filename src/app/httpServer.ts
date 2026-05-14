@@ -1,6 +1,7 @@
 import { execFile } from "child_process";
 import express from "express";
 import os from "os";
+import path from "path";
 import { isPatroniLeader } from "../adapters/patroni";
 import { attemptLeaderElection } from "../cluster/leaderElection";
 import { applyClusterConfig, getClusterConfig, getClusterConfigHash, getConfigPayload, hasClusterConfig } from "../cluster/config";
@@ -185,6 +186,16 @@ expressApp.post("/reboot", async (_req: express.Request, res: express.Response) 
 			if (error) {
 				console.warn(`Failed to reboot node: ${error.message}`);
 			}
+		});
+	}, 1000);
+});
+
+expressApp.post("/reset_node", (_req: express.Request, res: express.Response) => {
+	res.status(202).send();
+	setTimeout(() => {
+		// Run the command via systemd-run to ensure that it is fullfilled after the application is stopped.
+		execFile("systemd-run", ["/bin/sh", path.join(process.cwd(), "scripts/reset-node.sh")], (error) => {
+			if (error) console.warn(`Failed to reset node: ${error.message}`);
 		});
 	}, 1000);
 });
