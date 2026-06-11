@@ -43,7 +43,7 @@ rsync -a --exclude '.git' --exclude '.github' --exclude 'build' --exclude 'dist'
 
 # Install necessary config files and scripts into the live build root filesystem with the correct permissions.
 install_file configs/packages config/package-lists/linux-paas.list.chroot
-install_file configs/preseed.cfg config/binary_debian-installer/preseed.cfg
+install_file configs/preseed.cfg config/preseed/preseed.cfg
 install_file configs/sources.list config/includes.chroot/usr/local/share/linux-paas/sources.list
 install_file configs/20auto-upgrades config/includes.chroot/etc/apt/apt.conf.d/20auto-upgrades
 install_file configs/52no-auto-reboot config/includes.chroot/etc/apt/apt.conf.d/52no-auto-reboot
