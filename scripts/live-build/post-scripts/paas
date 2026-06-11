@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+	exec sudo -n /usr/local/bin/paas "$@"
+fi
+
+cd /opt/linux-paas
+NODE_ENV=production exec ./node_modules/.bin/tsx src/cli.ts "$@"

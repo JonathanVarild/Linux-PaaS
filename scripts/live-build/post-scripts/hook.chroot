@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+set -eu
+
+# Move to the linux paas directory.
+cd /opt/linux-paas
+
+# Install all necessary dependencies without dev dependencies, without npm audit and without npm fund.
+npm ci --omit=dev --no-audit --fund=false
+
+# Enable necessary systemd services.
+systemctl enable ssh docker linux-paas

@@ -1,0 +1,16 @@
+ca-certificates
+chrony
+docker-compose
+docker.io
+fail2ban
+iproute2
+iputils-ping
+libpam-pwquality
+nodejs
+npm
+openssh-server
+openssl
+sudo
+unattended-upgrades
+ufw
+wireguard-tools

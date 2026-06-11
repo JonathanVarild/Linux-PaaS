@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+set -eu
+
+# Run the UFW configuration script.
+/bin/sh /opt/linux-paas/scripts/live-build/post-scripts/configure-ufw.sh
+
+# Get the password hash for the superadmin user from the shadow file. 
+hash="$(getent shadow superadmin | cut -d: -f2)"
+
+# Use getent to check if the paas user already exists and if not create it with a homee directory and bash shell
+getent passwd paas >/dev/null || useradd -m -s /bin/bash paas
+
+# Set superadmin descriptin, and its shell.
+usermod -c "Linux PaaS Superadmin" -s /bin/bash superadmin
+
+# Set paas user shell and copy its password from the superadmin user.
+usermod -s /bin/bash -p "$hash" paas
+
+# Force both superadmin and paas to change password on initial login.
+chage -d 0 superadmin
+chage -d 0 paas
+
+# Copy the custom sources.list from staging folder to the new system etc/apt/ directory.
+cp /usr/local/share/linux-paas/sources.list /etc/apt/sources.list

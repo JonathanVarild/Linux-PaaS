@@ -8,7 +8,7 @@
 		"dev": "tsx watch src/app.ts",
 		"install:daemon": "sh ./scripts/install-debian-service.sh",
 		"install:paas": "sh ./scripts/install-paas-command.sh",
-		"install:ufw": "sh ./scripts/install-ufw-rules.sh",
+		"install:ufw": "sh ./scripts/live-build/post-scripts/configure-ufw.sh",
 		"create": "tsx src/cli.ts create",
 		"config": "tsx src/cli.ts config",
 		"accept": "tsx src/cli.ts accept",

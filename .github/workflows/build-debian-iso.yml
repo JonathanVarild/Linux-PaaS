@@ -1,0 +1,42 @@
+name: Build Debian ISO
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:trixie-slim
+      options: --privileged
+    timeout-minutes: 90
+
+    steps:
+      - name: Install live-build tools
+        run: |
+          apt-get update
+          apt-get install --yes ca-certificates git live-build rsync xorriso
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build ISO
+        run: bash ./scripts/live-build/build-debian-iso.sh
+
+      - name: Set release tag
+        run: |
+          DATE=$(date '+%Y.%m.%d')
+          TAG="$DATE.${{ github.run_number }}"
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "Release Tag: $TAG"
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ env.RELEASE_TAG }}
+          name: "Release ${{ env.RELEASE_TAG }}"
+          body: "Build of commit ${{ github.sha }} - Run Number: ${{ github.run_number }}"
+          artifacts: "dist/linux-paas-debian13-amd64.iso"

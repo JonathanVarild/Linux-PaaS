@@ -1,0 +1,1 @@
+paas ALL=(root) NOPASSWD: /usr/local/bin/paas

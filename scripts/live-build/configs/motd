@@ -1,0 +1,5 @@
+Welcome to your Linux PaaS instance.
+
+Strict recommendation: Use SSH key login and disable SSH passwords for all users. 
+Use 'superadmin' user for disabling password login.
+Guide: https://wiki.debian.org/Setup%20SSH%20Passwordless%20Login
