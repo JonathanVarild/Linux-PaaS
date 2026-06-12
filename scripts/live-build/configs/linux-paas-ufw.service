@@ -1,0 +1,10 @@
+[Unit]
+Before=linux-paas.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /opt/linux-paas/scripts/live-build/post-scripts/configure-ufw.sh
+ExecStartPost=/usr/bin/systemctl disable linux-paas-ufw.service
+
+[Install]
+WantedBy=multi-user.target

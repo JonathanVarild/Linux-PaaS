@@ -8,4 +8,4 @@ cd /opt/linux-paas
 npm ci --omit=dev --no-audit --fund=false
 
 # Enable necessary systemd services.
-systemctl enable ssh docker linux-paas
+systemctl enable ssh docker linux-paas-ufw linux-paas

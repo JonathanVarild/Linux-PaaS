@@ -1,9 +1,6 @@
 #!/usr/bin/env sh
 set -eu
 
-# Run the UFW configuration script.
-/bin/sh /opt/linux-paas/scripts/live-build/post-scripts/configure-ufw.sh
-
 # Get the password hash for the superadmin user from the shadow file. 
 hash="$(getent shadow superadmin | cut -d: -f2)"
 

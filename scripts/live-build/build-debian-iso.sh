@@ -48,6 +48,7 @@ install_file configs/sources.list config/includes.chroot/usr/local/share/linux-p
 install_file configs/20auto-upgrades config/includes.chroot/etc/apt/apt.conf.d/20auto-upgrades
 install_file configs/52no-auto-reboot config/includes.chroot/etc/apt/apt.conf.d/52no-auto-reboot
 install_file configs/fail2ban-sshd.conf config/includes.chroot/etc/fail2ban/jail.d/sshd.conf
+install_file configs/linux-paas-ufw.service config/includes.chroot/etc/systemd/system/linux-paas-ufw.service
 install_file configs/linux-paas.service config/includes.chroot/etc/systemd/system/linux-paas.service
 install_file configs/motd config/includes.chroot/etc/motd
 install_file configs/pwquality.conf config/includes.chroot/etc/security/pwquality.conf.d/linux-paas.conf
