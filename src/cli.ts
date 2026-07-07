@@ -6,7 +6,9 @@ import { logsCommandHandler, serviceLogsCommandHandler } from "./cli/logs";
 
 validateEnvironment();
 
-const program = new Command();
+const program = new Command()
+	.name("paas")
+	.description("CLI for managing a PaaS cluster.");
 
 program
 	.command("create")
